@@ -287,30 +287,35 @@ async def global_exception_handler(request: Request, exc: Exception):
 
 from web_interface.backend.static_files import SPAStaticFiles
 
-# Create a sub-application for API routes
-api_app = FastAPI(title="Web Log Monitor API")
-app.mount("/api", api_app)
-
-# Copy all routes from main app to api_app
-for route in app.routes:
-    if route.path.startswith("/api/"):
-        api_app.routes.append(route)
-
-# Remove API routes from main app to avoid duplicates
-app.routes = [route for route in app.routes if not route.path.startswith("/api/")]
-
-# Mount the static files (frontend) if the directory exists
+# First mount the static files (frontend) if the directory exists
 frontend_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "frontend", "build")
 logger.info(f"Looking for frontend files in: {frontend_dir}")
 if os.path.exists(frontend_dir):
     logger.info("Frontend directory found, mounting static files")
     try:
+        # Remove the root route before mounting static files
+        app.routes = [route for route in app.routes if route.path != "/"]
+        # Mount static files first
         app.mount("/", SPAStaticFiles(directory=frontend_dir, html=True), name="static")
         logger.info("Static files mounted successfully")
     except Exception as e:
         logger.error(f"Error mounting static files: {str(e)}")
 else:
     logger.error(f"Frontend directory not found at: {frontend_dir}")
+
+# Then create and mount the API routes
+api_app = FastAPI(title="Web Log Monitor API")
+
+# Copy API routes to api_app
+for route in app.routes:
+    if route.path.startswith("/api/"):
+        api_app.routes.append(route)
+
+# Remove API routes from main app
+app.routes = [route for route in app.routes if not route.path.startswith("/api/")]
+
+# Mount API routes last
+app.mount("/api", api_app)
 
 # Startup and shutdown events
 @app.on_event("startup")
