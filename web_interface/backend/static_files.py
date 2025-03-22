@@ -1,13 +1,13 @@
 import os
 import logging
 from fastapi.staticfiles import StaticFiles
-from starlette.responses import FileResponse, Response
+from starlette.responses import FileResponse, Response, JSONResponse
 from starlette.types import Scope, Receive, Send
 
 logger = logging.getLogger(__name__)
 
 class SPAStaticFiles(StaticFiles):
-    """Custom static files handler that serves index.html for all routes."""
+    """Custom static files handler that serves index.html for all non-API routes."""
     
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         """Handle incoming request."""
@@ -18,20 +18,19 @@ class SPAStaticFiles(StaticFiles):
         logger.debug(f"Handling request for path: {request_path}")
         
         try:
-            # Check if this is a static file request
-            if request_path.startswith("/static/"):
-                logger.debug(f"Serving static file: {request_path}")
+            # Skip API routes
+            if request_path.startswith("/api/"):
+                logger.debug(f"Skipping API route: {request_path}")
+                response = Response(status_code=404)
+                await response(scope, receive, send)
+                return
+            
+            # Try to serve as a static file first
+            try:
                 await super().__call__(scope, receive, send)
                 return
-                
-            # Check for other known static files
-            if request_path in ["/favicon.ico", "/manifest.json", "/logo192.png", "/logo512.png", "/robots.txt"]:
-                file_path = os.path.join(self.directory, request_path.lstrip("/"))
-                if os.path.exists(file_path):
-                    logger.debug(f"Serving known static file: {file_path}")
-                    response = FileResponse(file_path)
-                    await response(scope, receive, send)
-                    return
+            except Exception as e:
+                logger.debug(f"Static file not found, falling back to index.html: {str(e)}")
             
             # For all other routes, serve index.html
             index_path = os.path.join(self.directory, "index.html")
@@ -40,9 +39,9 @@ class SPAStaticFiles(StaticFiles):
                 response = FileResponse(index_path)
                 await response(scope, receive, send)
                 return
-                
-            # If we get here, the file wasn't found
-            logger.warning(f"File not found: {request_path}")
+            
+            # If we get here, something went wrong
+            logger.error(f"Could not serve path: {request_path}")
             response = Response(status_code=404)
             await response(scope, receive, send)
             

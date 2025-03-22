@@ -260,28 +260,35 @@ async def global_exception_handler(request: Request, exc: Exception):
         content={"detail": "Internal server error", "message": str(exc)},
     )
 
-# Mount static files with specific paths
+# Include API router first
+app.include_router(api_router)
+
+# Then mount static files
 frontend_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "frontend", "build")
 logger.info(f"Looking for frontend files in: {frontend_dir}")
 if os.path.exists(frontend_dir):
     logger.info("Frontend directory found, mounting static files")
     try:
-        # Mount static files directory
+        # Mount static files directory explicitly
         static_dir = os.path.join(frontend_dir, "static")
         if os.path.exists(static_dir):
             app.mount("/static", StaticFiles(directory=static_dir), name="static")
             logger.info("Static files mounted at /static")
         
-        # Mount root static files
+        # Mount other static files
+        app.mount("/favicon.ico", StaticFiles(directory=frontend_dir), name="favicon")
+        app.mount("/manifest.json", StaticFiles(directory=frontend_dir), name="manifest")
+        app.mount("/logo192.png", StaticFiles(directory=frontend_dir), name="logo192")
+        app.mount("/logo512.png", StaticFiles(directory=frontend_dir), name="logo512")
+        app.mount("/robots.txt", StaticFiles(directory=frontend_dir), name="robots")
+        
+        # Mount root last
         app.mount("/", SPAStaticFiles(directory=frontend_dir, html=True), name="root")
-        logger.info("Root static files mounted successfully")
+        logger.info("All static files mounted successfully")
     except Exception as e:
         logger.error(f"Error mounting static files: {str(e)}")
 else:
     logger.error(f"Frontend directory not found at: {frontend_dir}")
-
-# Include API router
-app.include_router(api_router)
 
 # Startup and shutdown events
 @app.on_event("startup")
