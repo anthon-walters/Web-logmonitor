@@ -12,8 +12,8 @@ import uvicorn
 import json
 from datetime import datetime
 
-from websocket_service import WebSocketService
-from data_service import DataService
+from web_interface.backend.websocket_service import WebSocketService
+from web_interface.backend.data_service import DataService
 
 # Add parent directory to path to import from the main application
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
