@@ -420,7 +420,24 @@ class UI:
     def update_pi_monitor_widget(self, data: List[Tuple[str, str, str]]) -> None:
         # Filter data based on monitoring state
         filtered_data = [item for item in data if self.monitoring_states.get(item[0], True)]
-        self._refresh_tree(self.pi_monitor_tree, filtered_data)
+        
+        # Sort data based on numerical value of identity
+        # Try to extract numerical value from identity, fallback to string sorting if not possible
+        def get_sort_key(item):
+            identity = item[0]
+            # Try to extract a number from the identity
+            try:
+                # Extract digits from the identity string
+                digits = ''.join(filter(str.isdigit, identity))
+                if digits:
+                    return int(digits)
+                else:
+                    return identity  # Fallback to string if no digits found
+            except (ValueError, TypeError):
+                return identity  # Fallback to string sorting
+        
+        sorted_data = sorted(filtered_data, key=get_sort_key)
+        self._refresh_tree(self.pi_monitor_tree, sorted_data)
 
     def update_success_rates(self, cv_success_rate: float, bib_detection_rate: float) -> None:
         self.cv_success_ax.clear()

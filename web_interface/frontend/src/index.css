@@ -1,0 +1,79 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background-color: #f0f2f5;
+}
+
+code {
+  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
+    monospace;
+}
+
+/* Custom styles */
+.status-indicator {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  display: inline-block;
+  margin-right: 8px;
+}
+
+.status-online {
+  background-color: lime;
+}
+
+.status-offline {
+  background-color: red;
+}
+
+.status-disabled {
+  background-color: darkgrey;
+}
+
+.processing-status {
+  width: 100px;
+  height: 50px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  border-radius: 4px;
+  color: black;
+  font-weight: bold;
+}
+
+.processing-status.processing {
+  background-color: #ff0000;
+}
+
+.processing-status.waiting {
+  background-color: #ffff00;
+}
+
+.processing-status.done {
+  background-color: #00ff00;
+}
+
+.processing-status.disabled {
+  background-color: #808080;
+  color: white;
+}
+
+/* Animation for flashing status */
+@keyframes flash {
+  0% { opacity: 1; }
+  50% { opacity: 0.5; }
+  100% { opacity: 1; }
+}
+
+.flashing {
+  animation: flash 1s infinite;
+}

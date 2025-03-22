@@ -272,12 +272,14 @@ class FileMonitor:
                             )
                             if main_response.status_code == 200:
                                 main_data = main_response.json()
+                                # Use the identity from the API response instead of pi_name
+                                device_identity = main_data.get('identity', pi_name)
                                 monitoring_data.append((
-                                    pi_name,
+                                    device_identity,
                                     str(main_data['totalFiles']),
                                     str(main_data['uploadedFiles'])
                                 ))
-                                self.logger.debug(f"{pi_name} is online - Total: {main_data['totalFiles']}, Uploaded: {main_data['uploadedFiles']}")
+                                self.logger.debug(f"{device_identity} is online - Total: {main_data['totalFiles']}, Uploaded: {main_data['uploadedFiles']}")
                             else:
                                 monitoring_data.append((pi_name, "0", "0"))
                                 self.logger.debug(f"{pi_name} main API returned status code {main_response.status_code}")
