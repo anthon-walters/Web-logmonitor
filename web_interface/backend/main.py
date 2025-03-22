@@ -24,7 +24,8 @@ from config import (
     API_PASSWORD,
     API_PORT,
     STATS_SERVER_HOST,
-    STATS_SERVER_PORT
+    STATS_SERVER_PORT,
+    WEB_INTERFACE_TITLE
 )
 
 # Import the file monitor
@@ -77,9 +78,29 @@ def get_current_username(credentials: HTTPBasicCredentials = Depends(security)):
 def read_root():
     return {"message": "Web Log Monitor API"}
 
+@app.get("/api/title")
+def get_title(_: str = Depends(get_current_username)):
+    """Get the web interface title."""
+    return {"title": WEB_INTERFACE_TITLE}
+
+@app.get("/api/debug")
+def get_debug_info():
+    """Get debug information about the API."""
+    return {
+        "file_monitor_connected": file_monitor.is_connected(),
+        "base_path": file_monitor.base_path,
+        "api_port": API_PORT,
+        "stats_server_host": STATS_SERVER_HOST,
+        "stats_server_port": STATS_SERVER_PORT,
+        "pi_addresses": file_monitor.pi_addresses,
+        "monitoring_states": data_service.monitoring_states,
+        "timestamp": datetime.now().isoformat()
+    }
+
 @app.get("/api/status")
 def get_status(_: str = Depends(get_current_username)):
     """Get the current status of the monitoring system."""
+    logger.info(f"Status API called - is_connected: {file_monitor.is_connected()}")
     return {
         "status": "running" if file_monitor.is_connected() else "disconnected",
         "timestamp": datetime.now().isoformat()
@@ -110,6 +131,7 @@ def get_pi_status(_: str = Depends(get_current_username)):
         return {"statuses": {f"H{i}": False for i in range(1, 11)}}
     
     statuses = file_monitor.check_pi_status()
+    logger.info(f"Pi status API called - returning statuses: {statuses}")
     return {"statuses": statuses}
 
 @app.get("/api/pi-statistics")
@@ -129,6 +151,13 @@ def get_pi_statistics(_: str = Depends(get_current_username)):
     
     for i in range(1, 11):
         pi_name = f"H{i}"
+        
+        # Check if monitoring is enabled for this device
+        if not data_service.monitoring_states.get(pi_name, True):
+            sent_data.append({"device": pi_name, "count": 0})
+            tagged_data.append({"device": pi_name, "count": 0})
+            bibs_data.append({"device": pi_name, "count": 0})
+            continue
         
         # Get total images
         total_images = file_monitor.get_pi_total_images(pi_name)
@@ -170,6 +199,15 @@ def get_pi_monitor(_: str = Depends(get_current_username)):
     # For now, we'll return a simplified version
     monitor_data = []
     for pi_name, is_online in statuses.items():
+        # Check if monitoring is enabled for this device
+        if not data_service.monitoring_states.get(pi_name, True):
+            monitor_data.append({
+                "device": pi_name,
+                "processed": 0,
+                "uploaded": 0
+            })
+            continue
+            
         if is_online:
             # Get data from the statistics API
             total_images = file_monitor.get_pi_total_images(pi_name)
@@ -195,7 +233,14 @@ def get_success_rates(_: str = Depends(get_current_username)):
     if not file_monitor.is_connected():
         return {"cv_rate": 0, "bib_rate": 0}
     
-    cv_rate, bib_rate = file_monitor.get_pi_success_rates()
+    # Get only the monitored devices
+    monitored_devices = [device for device, state in data_service.monitoring_states.items() if state]
+    
+    # If no devices are being monitored, return zeros
+    if not monitored_devices:
+        return {"cv_rate": 0, "bib_rate": 0}
+    
+    cv_rate, bib_rate = file_monitor.get_pi_success_rates(monitored_devices)
     return {"cv_rate": cv_rate, "bib_rate": bib_rate}
 
 # Add route for setting monitoring state
@@ -205,88 +250,31 @@ async def set_monitoring(device: str, state: bool, _: str = Depends(get_current_
     data_service.set_monitoring_state(device, state)
     return {"device": device, "monitoring": state}
 
-# Background task to periodically check and clean up stale WebSocket connections
-@app.on_event("startup")
-async def start_connection_cleanup():
-    async def cleanup_task():
-        while True:
-            try:
-                # Check connections every 30 seconds
-                await asyncio.sleep(30)
-                removed = await websocket_service.check_connections()
-                if removed > 0:
-                    logger.info(f"Connection cleanup removed {removed} stale connections")
-            except Exception as e:
-                logger.error(f"Error in connection cleanup task: {str(e)}")
-                await asyncio.sleep(30)  # Still wait before retrying
-    
-    # Start the cleanup task
-    asyncio.create_task(cleanup_task())
-    logger.info("Started WebSocket connection cleanup task")
+# Background task for WebSocket connection cleanup is disabled since we're using polling instead
+# @app.on_event("startup")
+# async def start_connection_cleanup():
+#     async def cleanup_task():
+#         while True:
+#             try:
+#                 # Check connections every 30 seconds
+#                 await asyncio.sleep(30)
+#                 removed = await websocket_service.check_connections()
+#                 if removed > 0:
+#                     logger.info(f"Connection cleanup removed {removed} stale connections")
+#             except Exception as e:
+#                 logger.error(f"Error in connection cleanup task: {str(e)}")
+#                 await asyncio.sleep(30)  # Still wait before retrying
+#     
+#     # Start the cleanup task
+#     asyncio.create_task(cleanup_task())
+#     logger.info("Started WebSocket connection cleanup task")
 
-@app.websocket("/ws")
-async def websocket_endpoint(websocket: WebSocket):
-    logger.info("WebSocket connection request received")
-    
-    try:
-        # Accept the connection without authentication for now
-        # In a production environment, you would want to add authentication
-        await websocket_service.connect(websocket)
-        logger.info("WebSocket connection accepted")
-        
-        # Start background task to send updates every 5 seconds if not already running
-        # This ensures we only have one background task regardless of how many clients connect
-        await websocket_service.start_background_task(data_service.get_all_data, 5.0)
-        
-        try:
-            # Send initial data immediately
-            initial_data = await data_service.get_all_data()
-            logger.info("Sending initial data to new WebSocket client")
-            await websocket.send_json(initial_data)
-            
-            # Main receive loop
-            while True:
-                # Wait for any message from the client with a timeout
-                try:
-                    # Use a timeout to periodically check if the connection is still alive
-                    data = await asyncio.wait_for(websocket.receive_text(), timeout=60.0)
-                    
-                    # Handle ping messages specially
-                    if data == 'ping':
-                        await websocket.send_text('pong')
-                        continue
-                    
-                    # Log the received message
-                    logger.info(f"Received WebSocket message: {data}")
-                    
-                    # Send current data immediately when requested
-                    all_data = await data_service.get_all_data()
-                    logger.info(f"Sending data to WebSocket client")
-                    await websocket.send_json(all_data)
-                except asyncio.TimeoutError:
-                    # No message received within timeout, check if connection is still alive
-                    try:
-                        # Send a ping to check if the connection is still alive
-                        await websocket.send_text('ping')
-                    except Exception:
-                        # Connection is dead, break out of the loop
-                        logger.info("WebSocket connection timed out and is no longer responsive")
-                        break
-                
-        except WebSocketDisconnect:
-            logger.info("WebSocket client disconnected")
-        except Exception as e:
-            logger.error(f"Error in WebSocket endpoint receive loop: {str(e)}")
-        finally:
-            # Always ensure we disconnect the client
-            if websocket in websocket_service.active_connections:
-                websocket_service.disconnect(websocket)
-    except Exception as e:
-        logger.error(f"Error establishing WebSocket connection: {str(e)}")
-    
-    # Only stop the background task if there are no more connections
-    if not websocket_service.active_connections:
-        await websocket_service.stop_background_task()
+# WebSocket endpoint is disabled since we're using polling instead
+# @app.websocket("/ws")
+# async def websocket_endpoint(websocket: WebSocket):
+#     logger.info("WebSocket connection request received")
+#     logger.warning("WebSocket endpoint is disabled. Use REST API polling instead.")
+#     await websocket.close(code=1000, reason="WebSocket endpoint is disabled")
 
 # Error handler for exceptions
 @app.exception_handler(Exception)
@@ -306,6 +294,8 @@ if os.path.exists(frontend_dir):
 @app.on_event("startup")
 async def startup_event():
     logger.info("Starting Web Log Monitor API")
+    logger.info(f"File monitor connection status: {file_monitor.is_connected()}")
+    logger.info(f"Base path: {file_monitor.base_path}")
 
 @app.on_event("shutdown")
 async def shutdown_event():
@@ -315,4 +305,4 @@ async def shutdown_event():
 
 # Run the server
 if __name__ == "__main__":
-    uvicorn.run("main:app", host="0.0.0.0", port=7171, reload=True, log_level="info")
+    uvicorn.run("main:app", host="0.0.0.0", port=API_PORT, reload=True, log_level="info")

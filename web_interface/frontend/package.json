@@ -18,6 +18,7 @@
   },
   "scripts": {
     "start": "react-scripts start",
+    "start:node22": "cross-env NODE_OPTIONS=\"--no-node-snapshot --openssl-legacy-provider\" react-scripts start",
     "build": "react-scripts build",
     "test": "react-scripts test",
     "eject": "react-scripts eject"
@@ -42,6 +43,7 @@
   },
   "devDependencies": {
     "autoprefixer": "^10.4.14",
+    "cross-env": "^7.0.3",
     "postcss": "^8.4.21"
   },
   "proxy": "http://localhost:7171"

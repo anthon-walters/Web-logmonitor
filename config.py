@@ -20,6 +20,9 @@ API_PORT = int(os.getenv('API_PORT', '8000'))
 STATS_SERVER_HOST = os.getenv('STATS_SERVER_HOST', 'localhost')
 STATS_SERVER_PORT = int(os.getenv('STATS_SERVER_PORT', '8000'))
 
+# Field Device Settings
+FIELD_DEVICE_PORT = int(os.getenv('FIELD_DEVICE_PORT', '8000'))
+
 # File paths
 PRE_DEST_DIR = os.getenv('PRE_DEST_DIR', r'\\PRODUCTION\media')  # Use raw string for Windows path
 
@@ -28,6 +31,7 @@ DEBUG_MODE: bool = os.getenv('DEBUG_MODE', 'False').lower() == 'true'
 PI_MONITOR_DEBUG: bool = os.getenv('PI_MONITOR_DEBUG', 'False').lower() == 'true'
 
 # Window settings
+WEB_INTERFACE_TITLE: str = "Web Log Monitor (Ver 1.0b)"
 WINDOW_TITLE: str = "Web Log Monitor V1.0"
 WINDOW_WIDTH: int = int(os.getenv('WINDOW_WIDTH', '1800'))
 WINDOW_HEIGHT: int = int(os.getenv('WINDOW_HEIGHT', '1150'))

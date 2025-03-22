@@ -1,9 +1,14 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { FaToggleOn, FaToggleOff } from 'react-icons/fa';
 
 const PiStatusDisplay = ({ statuses, monitoringStates, onToggleMonitoring }) => {
   // Create an array of device names (H1 to H10)
   const devices = Array.from({ length: 10 }, (_, i) => `H${i + 1}`);
+  
+  // Log the props for debugging
+  useEffect(() => {
+    console.log('PiStatusDisplay props:', { statuses, monitoringStates });
+  }, [statuses, monitoringStates]);
 
   return (
     <div className="flex flex-wrap gap-2 justify-between">

@@ -30,7 +30,8 @@ class FileMonitor:
             API_PASSWORD,
             API_PORT,
             STATS_SERVER_HOST,
-            STATS_SERVER_PORT
+            STATS_SERVER_PORT,
+            FIELD_DEVICE_PORT
         )
         
         # Store base network path
@@ -40,6 +41,7 @@ class FileMonitor:
         self.api_port = API_PORT
         self.stats_server_host = STATS_SERVER_HOST
         self.stats_server_port = STATS_SERVER_PORT
+        self.field_device_port = FIELD_DEVICE_PORT
         
         # Validate required settings
         if not self.base_path:
@@ -73,7 +75,7 @@ class FileMonitor:
         else:
             self.logger.info(f"Loaded {len(self.pi_addresses)} Pi IP addresses")
             for pi_name, ip in self.pi_addresses.items():
-                self.logger.debug(f"{pi_name}: {ip}")
+                self.logger.info(f"{pi_name}: {ip}")  # Changed to info level for debugging
         
         # Try to connect to the share
         try:
@@ -245,18 +247,33 @@ class FileMonitor:
         
         self.logger.debug("Starting Pi status check")
         
+        # Make sure we have statuses for all devices
+        for i in range(1, 11):
+            pi_name = f"H{i}"
+            statuses[pi_name] = False  # Default to offline
+        
         for pi_name, ip_address in self.pi_addresses.items():
             try:
                 # Try to connect to the Pi's health endpoint
-                url = f"http://{ip_address}:{self.api_port}/health"
-                self.logger.debug(f"Checking {pi_name} at {url}")
+                url = f"http://{ip_address}:{self.field_device_port}/health"
+                self.logger.info(f"Checking {pi_name} at {url}")
                 
-                response = requests.get(
-                    url,
-                    timeout=5
-                )
-                
-                self.logger.debug(f"{pi_name} response status: {response.status_code}")
+                try:
+                    response = requests.get(
+                        url,
+                        timeout=5
+                    )
+                    
+                    self.logger.info(f"{pi_name} response status: {response.status_code}")
+                except requests.exceptions.Timeout:
+                    self.logger.info(f"{pi_name} connection timed out")
+                    raise
+                except requests.exceptions.ConnectionError:
+                    self.logger.info(f"{pi_name} connection failed")
+                    raise
+                except Exception as e:
+                    self.logger.info(f"Error checking {pi_name} status: {str(e)}")
+                    raise
                 
                 if response.status_code == 200:
                     data = response.json()
@@ -264,7 +281,7 @@ class FileMonitor:
                         statuses[pi_name] = True
                         # Get file counts from the main API endpoint
                         try:
-                            main_url = f"http://{ip_address}:{self.api_port}/"
+                            main_url = f"http://{ip_address}:{self.field_device_port}/"
                             main_response = requests.get(
                                 main_url,
                                 auth=HTTPBasicAuth(self.api_username, self.api_password),

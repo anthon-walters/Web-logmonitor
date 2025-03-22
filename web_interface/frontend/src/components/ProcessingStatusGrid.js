@@ -1,6 +1,10 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 
 const ProcessingStatusGrid = ({ statuses }) => {
+  // Log the props for debugging
+  useEffect(() => {
+    console.log('ProcessingStatusGrid props:', { statuses });
+  }, [statuses]);
   // Define status colors
   const statusColors = {
     processing: 'processing',
