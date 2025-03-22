@@ -253,28 +253,10 @@ class FileMonitor:
             statuses[pi_name] = False  # Default to offline
         
         for pi_name, ip_address in self.pi_addresses.items():
+            # Try to connect to the Pi's health endpoint
+            url = f"http://{ip_address}:{self.field_device_port}/health"
             try:
-                # Try to connect to the Pi's health endpoint
-                url = f"http://{ip_address}:{self.field_device_port}/health"
-                self.logger.info(f"Checking {pi_name} at {url}")
-                
-                try:
-                    response = requests.get(
-                        url,
-                        timeout=5
-                    )
-                    
-                    self.logger.info(f"{pi_name} response status: {response.status_code}")
-                except requests.exceptions.Timeout:
-                    self.logger.info(f"{pi_name} connection timed out")
-                    raise
-                except requests.exceptions.ConnectionError:
-                    self.logger.info(f"{pi_name} connection failed")
-                    raise
-                except Exception as e:
-                    self.logger.info(f"Error checking {pi_name} status: {str(e)}")
-                    raise
-                
+                response = requests.get(url, timeout=5)
                 if response.status_code == 200:
                     data = response.json()
                     if data.get('status') == 'healthy':
@@ -357,8 +339,8 @@ class FileMonitor:
                             self.logger.debug(f"Found file: {rel_path}")
                             files.append(rel_path)
             
-            # Log summary
-            self.logger.info(f"Total files found: {len(files)}")
+            # Log summary at debug level
+            self.logger.debug(f"Total files found: {len(files)}")
             return files
         except Exception as e:
             self.logger.error(f"Error listing files: {str(e)}")
@@ -374,9 +356,6 @@ class FileMonitor:
                 self.logger.warning(f"Path does not exist: {search_path}")
                 return 0
             
-            # Log the directory being searched
-            self.logger.debug(f"Counting files in: {search_path}")
-                
             for root, dirs, filenames in os.walk(search_path):
                 # Skip 'Original' directories
                 if 'Original' in dirs:
@@ -385,15 +364,11 @@ class FileMonitor:
                 if pattern:
                     matched_files = [f for f in filenames if pattern.upper() in f.upper()]
                     count += len(matched_files)
-                    # Log matched files
-                    self.logger.debug(f"Found {len(matched_files)} matching files in {root}")
                 else:
                     count += len(filenames)
-                    # Log file count
-                    self.logger.debug(f"Found {len(filenames)} files in {root}")
             
-            # Log total count
-            self.logger.info(f"Total files in {search_path}: {count}")
+            # Log total count at debug level
+            self.logger.debug(f"Total files in {search_path}: {count}")
             return count
         except Exception as e:
             self.logger.error(f"Error counting files: {str(e)}")
