@@ -187,6 +187,13 @@ class FileMonitor:
             # Use a configurable threshold (import from config if needed)
             stale_threshold_minutes = 10
             if time_since_change > timedelta(minutes=stale_threshold_minutes):
+                 # --- Add Logging ---
+                 # Log only if the status is about to change or is already DONE
+                 if state.status != ProcessingStatus.DONE:
+                     self.logger.debug(f"[{pi_name}] Stale threshold met ({time_since_change}). Current status: {state.status.value}. Setting status to DONE.")
+                 elif pi_name == "H3": # Example: Log even if already DONE for a specific device
+                     self.logger.debug(f"[{pi_name}] Stale threshold met ({time_since_change}). Status already DONE.")
+                 # --- End Logging ---
                  # If it's been stale for a while, mark as DONE
                  if state.status != ProcessingStatus.DONE:
                       new_status = ProcessingStatus.DONE
