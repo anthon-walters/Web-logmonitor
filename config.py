@@ -31,7 +31,7 @@ DEBUG_MODE: bool = os.getenv('DEBUG_MODE', 'False').lower() == 'true'
 PI_MONITOR_DEBUG: bool = os.getenv('PI_MONITOR_DEBUG', 'False').lower() == 'true'
 
 # Window settings
-WEB_INTERFACE_TITLE: str = "Web Log Monitor (Ver 1.0b)"
+WEB_INTERFACE_TITLE: str = "Web Log Monitor (Ver 1.1a)"
 WINDOW_TITLE: str = "Web Log Monitor V1.0"
 WINDOW_WIDTH: int = int(os.getenv('WINDOW_WIDTH', '1800'))
 WINDOW_HEIGHT: int = int(os.getenv('WINDOW_HEIGHT', '1150'))

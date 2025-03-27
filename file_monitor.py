@@ -397,10 +397,12 @@ class FileMonitor:
 
             # Catch specific exceptions from requests and re-raise as custom types
             except requests.exceptions.Timeout as e_timeout:
-                self.logger.warning(f"{pi_name} connection timed out during status check: {e_timeout}")
+                # Log timeout at DEBUG level as it might be expected if a Pi is slow/offline
+                self.logger.debug(f"{pi_name} connection timed out during status check: {e_timeout}")
                 # Optionally raise ApiTimeoutError if needed downstream, but often just logging is okay for status check
             except requests.exceptions.ConnectionError as e_conn:
-                self.logger.warning(f"{pi_name} connection failed during status check: {e_conn}")
+                # Log connection error at DEBUG level as it might be expected if a Pi is offline
+                self.logger.debug(f"{pi_name} connection failed during status check: {e_conn}")
                 # Optionally raise ApiConnectionError
             except Exception as e_outer:
                 self.logger.error(f"Unexpected error checking {pi_name} status: {str(e_outer)}")
