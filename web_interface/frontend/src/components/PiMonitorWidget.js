@@ -1,6 +1,15 @@
 import React from 'react';
 
-const PiMonitorWidget = ({ data }) => {
+const PiMonitorWidget = ({ data, monitoringStates }) => { // Add monitoringStates prop
+
+  // Filter data based on monitoringStates
+  const filteredData = data.filter(item => {
+    // Keep the item if the device is monitored
+    // Need to handle potential variations in item.device name if it's not always H1, H2 etc.
+    // Assuming item.device is the key used in monitoringStates (e.g., "H1")
+    return monitoringStates[item.device] !== false; // Check against false explicitly
+  });
+
   return (
     <div className="bg-white shadow rounded-lg p-4">
       <h2 className="text-lg font-semibold mb-2">Field Device Status</h2>
@@ -21,7 +30,8 @@ const PiMonitorWidget = ({ data }) => {
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
-            {data.map((item, index) => (
+            {/* Map over filteredData */}
+            {filteredData.map((item, index) => (
               <tr key={index} className={index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
                 <td className="px-6 py-2 whitespace-nowrap text-sm text-gray-900">
                   {item.device}
@@ -34,7 +44,8 @@ const PiMonitorWidget = ({ data }) => {
                 </td>
               </tr>
             ))}
-            {data.length === 0 && (
+            {/* Check filteredData length */}
+            {filteredData.length === 0 && (
               <tr>
                 <td colSpan="3" className="px-6 py-4 text-center text-sm text-gray-500">
                   No data available

@@ -188,23 +188,26 @@ function App() {
       
       
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-4 mb-4">
-        <FileCountWidget data={data.file_counts} />
+        <FileCountWidget data={data.file_counts} monitoringStates={monitoringStates} />
         <StatusWidget 
           title="JPG files sent for Tagging" 
           data={data.pi_statistics.sent} 
           total={data.pi_statistics.totals[0]} 
+          monitoringStates={monitoringStates} 
         />
         <StatusWidget 
           title="JPG files tagged" 
           data={data.pi_statistics.tagged} 
           total={data.pi_statistics.totals[1]} 
+          monitoringStates={monitoringStates} 
         />
         <StatusWidget 
           title="Bibs found" 
           data={data.pi_statistics.bibs} 
           total={data.pi_statistics.totals[2]} 
+          monitoringStates={monitoringStates} 
         />
-        <PiMonitorWidget data={data.pi_monitor.data} />
+        <PiMonitorWidget data={data.pi_monitor.data} monitoringStates={monitoringStates} />
       </div>
       
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
