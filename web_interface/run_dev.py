@@ -40,16 +40,30 @@ def run_backend():
         
         print("Starting backend server...")
         print("Waiting for server to start on localhost:7171...")
+
+        # Calculate project root directory (one level up from web_interface)
+        project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         
-        # Run the backend server without changing directory
-        # Use shell=True to ensure the process runs properly on Windows
-        if sys.platform == 'win32':
-            subprocess.Popen([sys.executable, backend_main], shell=True)
-        else:
-            subprocess.Popen([sys.executable, backend_main])
+        # Define the port
+        port = 7171
+        
+        # Construct the uvicorn command with --reload for development
+        command = [
+            sys.executable, '-m', 'uvicorn',
+            'web_interface.backend.main:app',
+            '--host', '0.0.0.0',
+            '--port', str(port),
+            '--reload' # Enable auto-reload for development
+        ]
+        
+        print(f"Running backend command: {' '.join(command)} from {project_root}")
+        
+        # Run the uvicorn command from the project root directory using Popen
+        # Store the process handle to potentially terminate it later if needed
+        backend_process = subprocess.Popen(command, cwd=project_root)
         
         # Wait for the server to start
-        if wait_for_server('localhost', 7171, timeout=30):
+        if wait_for_server('localhost', port, timeout=30):
             print("\nBackend server started at http://localhost:7171")
         else:
             print("\nWARNING: Backend server may not have started properly")

@@ -32,11 +32,32 @@ def main():
         print("Starting backend server...")
         print("The server will be available at http://localhost:7171")
         print("Press Ctrl+C to stop the server")
+
+        # Calculate project root directory (one level up from web_interface)
+        project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         
-        # Run the backend server without changing directory
-        subprocess.run([sys.executable, backend_main])
+        # Define the port (using the hardcoded value from the print statement)
+        port = 7171
+        
+        # Construct the uvicorn command
+        # Use the module path 'web_interface.backend.main' and the app instance 'app'
+        command = [
+            sys.executable, '-m', 'uvicorn',
+            'web_interface.backend.main:app',
+            '--host', '0.0.0.0',
+            '--port', str(port)
+            # '--reload' # Typically not used in run_backend.py, more for run_dev.py
+        ]
+        
+        print(f"Running command: {' '.join(command)} from {project_root}")
+        
+        # Run the uvicorn command from the project root directory
+        subprocess.run(command, cwd=project_root)
+        
     except Exception as e:
         print(f"Error running backend: {str(e)}")
+        import traceback
+        traceback.print_exc() # Print full traceback for debugging
 
 if __name__ == "__main__":
     main()

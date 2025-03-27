@@ -2,6 +2,35 @@ import asyncio
 import logging
 from typing import Dict, List, Any, Optional
 from datetime import datetime
+from enum import Enum
+
+# Define Exceptions and Enum locally within this module
+class FileMonitorError(Exception):
+    """Base exception for FileMonitor errors."""
+    pass
+
+class ShareConnectionError(FileMonitorError):
+    """Error connecting to or accessing the network share."""
+    pass
+
+class ApiConnectionError(FileMonitorError):
+    """Error connecting to a remote API (Stats Server or Pi)."""
+    pass
+
+class ApiTimeoutError(ApiConnectionError):
+    """Timeout connecting to a remote API."""
+    pass
+
+class ApiResponseError(ApiConnectionError):
+    """Unexpected status code or invalid data from API."""
+    pass
+
+class ProcessingStatus(Enum):
+    PROCESSING = "processing"
+    WAITING = "waiting"
+    DONE = "done"
+    DISABLED = "disabled"
+    OFFLINE = "offline"
 
 logger = logging.getLogger("data_service")
 
@@ -56,7 +85,8 @@ class DataService:
             if not self.monitoring_states.get(pi_name, True):
                 continue
             
-            count = self.file_monitor.count_files(pi_name, '.JPG')
+            # Fix: Add comma between arguments
+            count = self.file_monitor.count_files(pi_name, '.JPG') 
             jpg_counts.append({"directory": pi_name, "count": count})
             total_files += count
         
@@ -75,41 +105,21 @@ class DataService:
         
         # Run in a thread pool to avoid blocking
         loop = asyncio.get_event_loop()
-        statuses = await loop.run_in_executor(None, self.file_monitor.check_pi_status)
+        # Use the new method which returns both status and monitor data
+        statuses, _ = await loop.run_in_executor(None, self.file_monitor.check_pi_status_and_get_data)
         
+        # Also update internal processing state based on online status
+        for pi_name, is_online in statuses.items():
+             if not is_online and self.monitoring_states.get(pi_name, True):
+                  if pi_name in self.file_monitor.pi_states:
+                       # Mark as offline if not already disabled - Use locally defined ProcessingStatus
+                       if self.file_monitor.pi_states[pi_name].status != ProcessingStatus.DISABLED:
+                            self.file_monitor.pi_states[pi_name].status = ProcessingStatus.OFFLINE
+
         return {
             "type": "pi_status",
             "data": {
                 "statuses": statuses,
-                "timestamp": datetime.now().isoformat()
-            }
-        }
-    
-    async def get_pi_statistics(self) -> Dict[str, Any]:
-        """Get statistics for all Pi devices."""
-        if not self.file_monitor.is_connected():
-            return {
-                "type": "pi_statistics",
-                "data": {
-                    "sent": [],
-                    "tagged": [],
-                    "bibs": [],
-                    "totals": [0, 0, 0],
-                    "timestamp": datetime.now().isoformat()
-                }
-            }
-        
-        # Run in a thread pool to avoid blocking
-        loop = asyncio.get_event_loop()
-        result = await loop.run_in_executor(None, self._get_pi_statistics_sync)
-        
-        return {
-            "type": "pi_statistics",
-            "data": {
-                "sent": result["sent"],
-                "tagged": result["tagged"],
-                "bibs": result["bibs"],
-                "totals": result["totals"],
                 "timestamp": datetime.now().isoformat()
             }
         }
@@ -168,7 +178,8 @@ class DataService:
         
         # Run in a thread pool to avoid blocking
         loop = asyncio.get_event_loop()
-        monitor_data = await loop.run_in_executor(None, self._get_pi_monitor_sync)
+        # Use the new dedicated method, passing current monitoring states
+        monitor_data = await loop.run_in_executor(None, self.file_monitor.get_pi_monitor_data, self.monitoring_states)
         
         return {
             "type": "pi_monitor",
@@ -178,44 +189,9 @@ class DataService:
             }
         }
     
-    def _get_pi_monitor_sync(self) -> List[Dict[str, Any]]:
-        """Synchronous version of get_pi_monitor."""
-        # This is a bit of a hack since we don't have direct access to the monitoring data
-        # In a real implementation, we would refactor the file_monitor to provide this data directly
-        statuses = self.file_monitor.check_pi_status()
-        
-        # The check_pi_status method updates the UI with monitoring data
-        # We need to extract this data from somewhere else or modify the file_monitor
-        # For now, we'll return a simplified version
-        monitor_data = []
-        for pi_name, is_online in statuses.items():
-            # Skip if monitoring is disabled
-            if not self.monitoring_states.get(pi_name, True):
-                monitor_data.append({
-                    "device": pi_name,
-                    "processed": 0,
-                    "uploaded": 0
-                })
-                continue
-            
-            if is_online:
-                # Get data from the statistics API
-                total_images = self.file_monitor.get_pi_total_images(pi_name)
-                # For uploaded, we'll use a placeholder
-                # In a real implementation, we would get this from the file_monitor
-                monitor_data.append({
-                    "device": pi_name,
-                    "processed": total_images,
-                    "uploaded": total_images  # Placeholder
-                })
-            else:
-                monitor_data.append({
-                    "device": pi_name,
-                    "processed": 0,
-                    "uploaded": 0
-                })
-        
-        return monitor_data
+    # This synchronous helper is no longer needed as get_pi_monitor_data handles it
+    # def _get_pi_monitor_sync(self) -> List[Dict[str, Any]]:
+    #     ...
     
     async def get_success_rates(self) -> Dict[str, Any]:
         """Get CV and bib detection success rates."""
@@ -249,40 +225,35 @@ class DataService:
                 "timestamp": datetime.now().isoformat()
             }
         }
-    
+
     async def get_processing_status(self) -> Dict[str, Any]:
-        """Get processing status for all Pi devices."""
-        # This is a placeholder since we don't have direct access to the processing status
-        # In a real implementation, we would refactor the file_monitor to provide this data directly
+        """Get processing status for all Pi devices using the refactored method."""
         if not self.file_monitor.is_connected():
+            # Return default status if not connected
+            default_statuses = {}
+            for i in range(1, 11):
+                 pi_name = f"H{i}"
+                 # Use locally defined ProcessingStatus
+                 default_statuses[pi_name] = {
+                     "status": ProcessingStatus.DISABLED.value,
+                     "count": 0
+                 }
             return {
                 "type": "processing_status",
                 "data": {
-                    "statuses": {},
+                    "statuses": default_statuses,
                     "timestamp": datetime.now().isoformat()
                 }
             }
-        
-        # For now, we'll return a simplified version based on the total images
-        statuses = {}
-        for i in range(1, 11):
-            pi_name = f"H{i}"
-            
-            # Skip if monitoring is disabled
-            if not self.monitoring_states.get(pi_name, True):
-                statuses[pi_name] = {"status": "disabled", "count": 0}
-                continue
-            
-            # Get total images
-            total_images = self.file_monitor.get_pi_total_images(pi_name)
-            
-            # Determine status based on total images
-            # This is a simplified version of the logic in the UI
-            if total_images > 0:
-                statuses[pi_name] = {"status": "processing", "count": total_images}
-            else:
-                statuses[pi_name] = {"status": "waiting", "count": 0}
-        
+
+        # If connected, run the actual status check in executor
+        loop = asyncio.get_event_loop()
+        statuses = await loop.run_in_executor(
+            None,
+            self.file_monitor.get_all_processing_states,
+            self.monitoring_states
+        )
+
         return {
             "type": "processing_status",
             "data": {
@@ -297,7 +268,8 @@ class DataService:
             # Get all data in parallel
             file_counts_task = asyncio.create_task(self.get_file_counts())
             pi_status_task = asyncio.create_task(self.get_pi_status())
-            pi_statistics_task = asyncio.create_task(self.get_pi_statistics())
+            # Use _get_pi_statistics_sync directly in executor as it handles exceptions
+            pi_statistics_task = asyncio.get_event_loop().run_in_executor(None, self._get_pi_statistics_sync)
             pi_monitor_task = asyncio.create_task(self.get_pi_monitor())
             success_rates_task = asyncio.create_task(self.get_success_rates())
             processing_status_task = asyncio.create_task(self.get_processing_status())
@@ -305,7 +277,7 @@ class DataService:
             # Wait for all tasks to complete
             file_counts = await file_counts_task
             pi_status = await pi_status_task
-            pi_statistics = await pi_statistics_task
+            pi_statistics_result = await pi_statistics_task # Result from sync function
             pi_monitor = await pi_monitor_task
             success_rates = await success_rates_task
             processing_status = await processing_status_task
@@ -319,16 +291,34 @@ class DataService:
                 "data": {
                     "file_counts": file_counts["data"],
                     "pi_status": pi_status["data"],
-                    "pi_statistics": pi_statistics["data"],
+                    "pi_statistics": pi_statistics_result, # Use the direct result
                     "pi_monitor": pi_monitor["data"],
                     "success_rates": success_rates["data"],
                     "processing_status": processing_status["data"],
                     "timestamp": datetime.now().isoformat()
                 }
             }
-        except Exception as e:
-            logger.error(f"Error getting all data: {str(e)}")
-            # Return empty data on error
+        # Catch specific FileMonitor errors using the locally defined classes
+        except (ApiConnectionError, ApiTimeoutError, ApiResponseError, ShareConnectionError, FileMonitorError) as fm_error:
+            logger.error(f"FileMonitor error getting all data: {type(fm_error).__name__} - {str(fm_error)}")
+            error_message = f"{type(fm_error).__name__}: {str(fm_error)}"
+            # Return empty data with specific error info
+            return {
+                "type": "all_data",
+                "data": {
+                    "file_counts": {"counts": [], "total": 0},
+                    "pi_status": {"statuses": {}},
+                    "pi_statistics": {"sent": [], "tagged": [], "bibs": [], "totals": [0, 0, 0]},
+                    "pi_monitor": {"data": []},
+                    "success_rates": {"cv_rate": 0, "bib_rate": 0},
+                    "processing_status": {"statuses": {}},
+                    "timestamp": datetime.now().isoformat(),
+                    "error": error_message # Use the formatted error message
+                }
+            }
+        except Exception as e: # Catch any other unexpected errors
+            logger.error(f"Unexpected error getting all data: {str(e)}", exc_info=True)
+            # Return empty data with generic error
             return {
                 "type": "all_data",
                 "data": {

@@ -15,37 +15,32 @@ class SPAStaticFiles(StaticFiles):
         
         # Get the request path
         request_path = scope["path"]
-        logger.debug(f"Handling request for path: {request_path}")
-        
+        logger.debug(f"SPA Handling request for path: {request_path}")
+
         try:
-            # Skip API routes
-            if request_path.startswith("/api/"):
-                logger.debug(f"Skipping API route: {request_path}")
-                response = Response(status_code=404)
+            # Try to serve the static file using the parent class
+            response = await self.get_response(request_path, scope)
+            if response.status_code != 404:
+                # If found and not a 404, serve it
+                logger.debug(f"Serving static file: {request_path}")
                 await response(scope, receive, send)
                 return
-            
-            # Try to serve as a static file first
-            try:
-                await super().__call__(scope, receive, send)
-                return
-            except Exception as e:
-                logger.debug(f"Static file not found, falling back to index.html: {str(e)}")
-            
-            # For all other routes, serve index.html
-            index_path = os.path.join(self.directory, "index.html")
-            if os.path.exists(index_path):
-                logger.debug(f"Serving index.html for path: {request_path}")
-                response = FileResponse(index_path)
-                await response(scope, receive, send)
-                return
-            
-            # If we get here, something went wrong
-            logger.error(f"Could not serve path: {request_path}")
-            response = Response(status_code=404)
-            await response(scope, receive, send)
-            
+            # If parent class returned 404, fall through to serve index.html
+            logger.debug(f"Static file not found for {request_path}, falling back to index.html")
+
         except Exception as e:
-            logger.error(f"Error serving static files: {str(e)}")
-            response = Response(status_code=500)
+            # Handle potential errors during static file lookup
+            logger.warning(f"Error looking up static file {request_path}, falling back to index.html: {e}")
+            # Fall through to serve index.html
+
+        # Serve index.html if static file not found or error occurred
+        index_path = os.path.join(self.directory, "index.html")
+        if os.path.exists(index_path):
+            logger.debug(f"Serving index.html for path: {request_path}")
+            response = FileResponse(index_path, stat_result=os.stat(index_path))
+            await response(scope, receive, send)
+        else:
+            # If index.html doesn't exist either, return 404
+            logger.error(f"index.html not found in directory: {self.directory}")
+            response = Response("Not Found", status_code=404)
             await response(scope, receive, send)

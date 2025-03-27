@@ -1,0 +1,406 @@
+# Web Log Monitor Installation Guide
+
+This document provides detailed instructions for installing and configuring the Web Log Monitor application on both Windows and Linux systems.
+
+## Prerequisites
+
+### Common Requirements
+- Python 3.7 or higher (3.11 recommended)
+- Node.js 18 or higher (for proper OpenSSL support)
+- Git
+- Access to the required network shares and Pi devices
+- npm (usually comes with Node.js)
+- Python virtual environment module (venv)
+
+### Windows Prerequisites
+- Windows 10 or higher
+- Network share access configured
+- Python and Node.js added to PATH
+
+### Linux Prerequisites
+- systemd-based Linux distribution (Ubuntu, Debian, RHEL, etc.)
+- Network file system support (if using NFS/CIFS)
+- sudo/root access
+
+### Node.js Setup on Linux
+
+1. Install Node.js 18.x using NodeSource repository:
+```bash
+# Using Ubuntu/Debian
+curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
+sudo apt-get install -y nodejs
+
+# Using RHEL/CentOS/Fedora
+curl -fsSL https://rpm.nodesource.com/setup_18.x | sudo bash -
+sudo yum install -y nodejs
+```
+
+2. Verify installation:
+```bash
+node --version  # Should show v18.x.x
+npm --version   # Should show 8.x.x or higher
+```
+
+3. Configure npm for global installations (optional):
+```bash
+# Set up global npm directory for non-root user
+mkdir ~/.npm-global
+npm config set prefix '~/.npm-global'
+echo 'export PATH=~/.npm-global/bin:$PATH' >> ~/.profile
+source ~/.profile
+```
+
+4. Install build essentials (required for some npm packages):
+```bash
+# Ubuntu/Debian
+sudo apt-get install -y build-essential
+
+# RHEL/CentOS/Fedora
+sudo yum group install "Development Tools"
+```
+
+### Node.js Troubleshooting on Linux
+
+1. OpenSSL issues:
+```bash
+# If you see OpenSSL errors, set this environment variable
+export NODE_OPTIONS="--openssl-legacy-provider"
+# Add to .bashrc for persistence
+echo 'export NODE_OPTIONS="--openssl-legacy-provider"' >> ~/.bashrc
+```
+
+2. Memory issues during build:
+```bash
+# Increase Node.js memory limit
+export NODE_OPTIONS="--max-old-space-size=4096"
+```
+
+3. Permission issues:
+```bash
+# Fix npm permissions
+sudo chown -R $USER:$GROUP ~/.npm
+sudo chown -R $USER:$GROUP ~/.config
+```
+
+4. Cache issues:
+```bash
+# Clear npm cache
+npm cache clean --force
+# Remove node_modules and package-lock.json
+rm -rf node_modules package-lock.json
+```
+
+## Installation Steps
+
+### Windows Installation
+
+1. Clone the repository:
+```batch
+git clone https://github.com/your-repo/Web-logmonitor.git
+cd Web-logmonitor
+```
+
+2. Create Python package structure and virtual environment:
+```batch
+python -m venv venv
+venv\Scripts\activate
+mkdir web_interface\__pycache__
+mkdir web_interface\backend\__pycache__
+type nul > web_interface\__init__.py
+type nul > web_interface\backend\__init__.py
+```
+
+3. Install Python dependencies:
+```batch
+pip install -r requirements.txt
+cd web_interface/backend
+pip install -r requirements.txt
+cd ../..
+```
+
+4. Install frontend dependencies and build:
+```batch
+cd web_interface/frontend
+npm install
+npm run build
+cd ../..
+```
+
+5. Configure environment:
+```batch
+copy .env.example .env
+```
+Edit .env and set:
+- PRE_DEST_DIR: Network share path (e.g., "\\server\share\path")
+- API_USERNAME and API_PASSWORD
+- API_PORT (default: 7171)
+- STATS_SERVER_HOST and STATS_SERVER_PORT
+- PI_1_IP through PI_10_IP for your Pi devices
+
+6. Run the application:
+```batch
+python web_interface/run_production.py
+```
+
+7. Access the web interface at http://localhost:7171
+
+### Linux Installation
+
+1. Clone the repository:
+```bash
+cd /usr/opt
+sudo git clone https://github.com/your-repo/Web-logmonitor.git
+cd Web-logmonitor
+```
+
+2. Create Python package structure and virtual environment:
+```bash
+sudo python3 -m venv venv
+source venv/bin/activate
+mkdir -p web_interface/__pycache__
+mkdir -p web_interface/backend/__pycache__
+touch web_interface/__init__.py
+touch web_interface/backend/__init__.py
+```
+
+3. Install Python dependencies:
+```bash
+pip install -r requirements.txt
+cd web_interface/backend
+pip install -r requirements.txt
+pip install gunicorn
+cd ../..
+```
+
+4. Install frontend dependencies and build:
+```bash
+cd web_interface/frontend
+
+# Clear any previous builds
+rm -rf build/
+rm -rf node_modules/
+rm -f package-lock.json
+
+# Install dependencies with specific settings
+npm install --no-optional --legacy-peer-deps
+
+# Build with production optimization
+NODE_ENV=production npm run build
+
+# Verify build
+ls -la build/
+ls -la build/static/js/
+ls -la build/static/css/
+
+cd ../..
+```
+
+Note: If the build fails, try these steps:
+1. Clear npm cache: `npm cache clean --force`
+2. Use legacy OpenSSL: `export NODE_OPTIONS="--openssl-legacy-provider"`
+3. Increase memory: `export NODE_OPTIONS="--max-old-space-size=4096"`
+4. Rebuild: `npm run build`
+
+5. Configure environment:
+```bash
+sudo cp .env.example .env
+sudo nano .env
+```
+Edit .env and set:
+- PRE_DEST_DIR: Mount point path (e.g., "/media/pre-processing")
+- API_USERNAME and API_PASSWORD
+- API_PORT (default: 7171)
+- STATS_SERVER_HOST and STATS_SERVER_PORT
+- PI_1_IP through PI_10_IP for your Pi devices
+
+6. Create systemd service:
+```bash
+sudo nano /etc/systemd/system/weblogmonitor.service
+```
+Add the following content:
+```ini
+[Unit]
+Description=Web Log Monitor
+After=network.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/usr/opt/Web-logmonitor
+Environment=PYTHONPATH=/usr/opt/Web-logmonitor
+Environment=LOG_LEVEL=error
+Environment=PYTHONUNBUFFERED=1
+EnvironmentFile=/usr/opt/Web-logmonitor/.env
+
+ExecStart=/usr/opt/Web-logmonitor/venv/bin/gunicorn "web_interface.backend.main:app" \
+    --workers 1 \
+    --worker-class uvicorn.workers.UvicornWorker \
+    --bind 0.0.0.0:7171 \
+    --log-level error \
+    --access-logfile /dev/null \
+    --error-logfile - \
+    --timeout 120 \
+    --worker-tmp-dir /dev/shm \
+    --capture-output \
+    --access-logformat '%(h)s "%(r)s" %(s)s'
+
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+LogLevelMax=err
+
+[Install]
+WantedBy=multi-user.target
+```
+
+7. Enable and start the service:
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable weblogmonitor
+sudo systemctl start weblogmonitor
+```
+
+8. Access the web interface at http://localhost:7171
+
+## Service Management (Linux)
+
+Start the service:
+```bash
+sudo systemctl start weblogmonitor
+```
+
+Stop the service:
+```bash
+sudo systemctl stop weblogmonitor
+```
+
+Restart the service:
+```bash
+sudo systemctl restart weblogmonitor
+```
+
+Check service status:
+```bash
+sudo systemctl status weblogmonitor
+```
+
+View logs:
+```bash
+# View only errors
+sudo journalctl -u weblogmonitor -p err
+
+# View last 20 lines
+sudo journalctl -u weblogmonitor -n 20
+```
+
+## Troubleshooting
+
+### Common Issues
+
+1. "Module not found" errors:
+   - Ensure PYTHONPATH is set correctly
+   - Verify virtual environment is activated
+   - Check all Python dependencies are installed
+
+2. Frontend not loading:
+   - Verify Node.js is installed and in PATH
+   - Check frontend build completed successfully
+   - Ensure static files are being served correctly
+
+3. Cannot connect to Pi devices:
+   - Verify Pi IP addresses in .env
+   - Check network connectivity
+   - Ensure Pi services are running
+
+4. File access issues:
+   - Check PRE_DEST_DIR path exists
+   - Verify file permissions
+   - Ensure network shares are mounted (Linux)
+
+### Windows-Specific
+
+1. Network share access:
+   - Verify Windows credentials
+   - Check UNC path format
+   - Ensure network discovery is enabled
+
+### Linux-Specific
+
+1. Service not starting:
+   - Check systemd service status
+   - Verify paths in service file
+   - Check log output for errors
+
+2. Permission issues:
+   - Verify user permissions
+   - Check file ownership
+   - Ensure correct SELinux context (if applicable)
+
+## Updating the Application
+
+1. Stop the service/application
+2. Pull latest changes:
+```bash
+git pull origin main
+```
+3. Rebuild frontend:
+```bash
+cd web_interface/frontend
+npm install
+npm run build
+cd ../..
+```
+4. Update Python dependencies:
+```bash
+pip install -r requirements.txt
+cd web_interface/backend
+pip install -r requirements.txt
+cd ../..
+```
+5. Restart the service/application
+
+## Security Considerations
+
+1. Always change default API credentials
+2. Use secure network configurations
+3. Keep system and dependencies updated
+4. Monitor logs for suspicious activity
+5. Use firewall rules to restrict access
+6. Ensure proper file permissions:
+   - Windows: Set appropriate NTFS permissions
+   - Linux: Use chmod/chown to secure files
+7. Network security:
+   - Use VPN for remote access
+   - Implement network segmentation
+   - Configure firewalls to allow only required ports
+
+## Development Notes
+
+1. Node.js version considerations:
+   - Use Node.js 18+ for proper OpenSSL support
+   - If using older Node.js, set NODE_OPTIONS="--openssl-legacy-provider"
+   - For production builds, set NODE_ENV=production
+   - Monitor memory usage during builds
+   - Use --legacy-peer-deps for compatibility
+
+2. Python package structure:
+   - Keep __init__.py files to maintain proper Python packaging
+   - Ensure PYTHONPATH includes project root
+   - Use absolute imports in Python code
+
+3. Frontend development:
+   - Development server runs on port 3000
+   - Production build served from FastAPI on port 7171
+   - Use npm run build for production deployment
+
+4. Backend development:
+   - FastAPI handles both API and static file serving
+   - Single worker recommended for consistent state
+   - Debug logging available by setting LOG_LEVEL=debug
+
+5. Version compatibility:
+   - Python 3.7+: Required for modern async features
+   - Node.js 18+: Required for proper build tools
+   - FastAPI 0.95.0+: Required for static file handling

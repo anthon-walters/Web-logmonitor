@@ -34,164 +34,87 @@ function App() {
     setMonitoringStates(initialStates);
   }, []);
 
-  // Use polling instead of WebSockets for more stability
+  // WebSocket connection
   useEffect(() => {
-    let pollInterval = null;
-    let isPolling = false;
-    
-    const fetchData = async () => {
-      if (isPolling) return; // Prevent overlapping requests
-      
-      isPolling = true;
-      
-      try {
-        // In development mode, connect directly to the backend API
-        const apiBaseUrl = process.env.NODE_ENV === 'production'
-          ? ''
-          : 'http://localhost:7171';
-        
-        console.log(`Connecting to API at: ${apiBaseUrl} - ${new Date().toISOString()}`);
-        
-        // Get authentication credentials
-        const username = process.env.REACT_APP_API_USERNAME || 'admin';
-        const password = process.env.REACT_APP_API_PASSWORD || 'changeme';
-        
-        console.log(`Using credentials: ${username}/${password}`);
-        
-        // Get API timeout from environment variable or use default
-        const apiTimeout = parseInt(process.env.REACT_APP_API_TIMEOUT || '10000', 10);
-        
-        // Common fetch options with authentication
-        const fetchOptions = {
-          headers: {
-            'Authorization': 'Basic ' + btoa(`${username}:${password}`)
-          }
-        };
-        
-        console.log('Fetching data from API endpoints...');
-        
-        // Fetch status first to check if the API is accessible
-        console.log('Fetching status...');
-        const statusRes = await fetch(`${apiBaseUrl}/api/status`, fetchOptions);
-        console.log(`Status response: ${statusRes.status} ${statusRes.statusText}`);
-        
-        if (!statusRes.ok) {
-          console.error(`Status API error: ${statusRes.status} ${statusRes.statusText}`);
-          setConnected(false);
-          return;
+    let ws = null;
+    let reconnectTimeout = null;
+
+    const connectWebSocket = () => {
+      // Determine WebSocket URL based on environment
+      const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const wsHost = process.env.NODE_ENV === 'production' ? window.location.host : 'localhost:7171';
+      const wsUrl = `${wsProtocol}//${wsHost}/ws`;
+
+      console.log(`Attempting to connect WebSocket to: ${wsUrl}`);
+      ws = new WebSocket(wsUrl);
+
+      ws.onopen = () => {
+        console.log('WebSocket connected');
+        setConnected(true);
+        // Clear any reconnect timeout
+        if (reconnectTimeout) {
+          clearTimeout(reconnectTimeout);
+          reconnectTimeout = null;
         }
-        
-        // If status is OK, fetch the rest of the data
-        console.log('Fetching remaining endpoints...');
-        const [titleRes, fileCountsRes, piStatusRes, piStatisticsRes, piMonitorRes, successRatesRes] = await Promise.all([
-          fetch(`${apiBaseUrl}/api/title`, fetchOptions),
-          fetch(`${apiBaseUrl}/api/file-counts`, fetchOptions),
-          fetch(`${apiBaseUrl}/api/pi-status`, fetchOptions),
-          fetch(`${apiBaseUrl}/api/pi-statistics`, fetchOptions),
-          fetch(`${apiBaseUrl}/api/pi-monitor`, fetchOptions),
-          fetch(`${apiBaseUrl}/api/success-rates`, fetchOptions)
-        ]);
-        
-        // Log response status for each endpoint
-        console.log(`Title response: ${titleRes.status} ${titleRes.statusText}`);
-        console.log(`File counts response: ${fileCountsRes.status} ${fileCountsRes.statusText}`);
-        console.log(`Pi status response: ${piStatusRes.status} ${piStatusRes.statusText}`);
-        console.log(`Pi statistics response: ${piStatisticsRes.status} ${piStatisticsRes.statusText}`);
-        console.log(`Pi monitor response: ${piMonitorRes.status} ${piMonitorRes.statusText}`);
-        console.log(`Success rates response: ${successRatesRes.status} ${successRatesRes.statusText}`);
-        
-        // Check if all requests were successful
-        if (statusRes.ok && titleRes.ok && fileCountsRes.ok && piStatusRes.ok && piStatisticsRes.ok && piMonitorRes.ok && successRatesRes.ok) {
-          // Parse all responses
-          const [statusData, titleData, file_counts, pi_status, pi_statistics, pi_monitor, success_rates] = await Promise.all([
-            statusRes.json(),
-            titleRes.json(),
-            fileCountsRes.json(),
-            piStatusRes.json(),
-            piStatisticsRes.json(),
-            piMonitorRes.json(),
-            successRatesRes.json()
-          ]);
-          
-          // Generate processing status from pi_status
-          const processing_status = {
-            statuses: {}
-          };
-          
-          // Convert pi_status to processing_status format
-          if (pi_status && pi_status.statuses) {
-            Object.entries(pi_status.statuses).forEach(([device, isOnline]) => {
-              // If monitoring is disabled for this device, mark as disabled
-              if (!monitoringStates[device]) {
-                processing_status.statuses[device] = { status: 'disabled', count: 0 };
-              } else if (isOnline) {
-                // If device is online, mark as processing
-                processing_status.statuses[device] = { status: 'processing', count: 0 };
-                
-                // Try to get count from pi_monitor data
-                const deviceData = pi_monitor.data.find(item => item.device === device);
-                if (deviceData) {
-                  processing_status.statuses[device].count = deviceData.processed;
-                }
-              } else {
-                // If device is offline, mark as waiting
-                processing_status.statuses[device] = { status: 'waiting', count: 0 };
-              }
-            });
+        // Optional: Send authentication if needed after connection
+        // const username = process.env.REACT_APP_API_USERNAME || 'admin';
+        // const password = process.env.REACT_APP_API_PASSWORD || 'changeme';
+        // ws.send(JSON.stringify({ type: 'auth', data: { username, password } }));
+      };
+
+      ws.onmessage = (event) => {
+        try {
+          const message = JSON.parse(event.data);
+          // console.log('WebSocket message received:', message);
+
+          if (message.type === 'all_data') {
+            // Directly use the data structure from the backend
+            setData(prevData => ({
+              ...prevData, // Keep existing title if not provided by WS
+              ...message.data, // Overwrite with new data from WebSocket
+              timestamp: message.data.timestamp || new Date().toISOString() // Ensure timestamp is updated
+            }));
+          } else {
+             console.log('Received unhandled WebSocket message type:', message.type);
           }
-          
-          // Log the data received from the API
-          console.log('Data received from API:');
-          console.log('title:', titleData);
-          console.log('file_counts:', file_counts);
-          console.log('pi_status:', pi_status);
-          console.log('pi_statistics:', pi_statistics);
-          console.log('pi_monitor:', pi_monitor);
-          console.log('success_rates:', success_rates);
-          console.log('processing_status:', processing_status);
-          
-          // Update state with all data
-          setData({
-            file_counts,
-            pi_status,
-            pi_statistics,
-            pi_monitor,
-            success_rates,
-            processing_status,
-            timestamp: new Date().toISOString(),
-            title: titleData.title
-          });
-          
-          setConnected(true);
-        } else {
-          console.error('One or more API requests failed');
-          setConnected(false);
+        } catch (error) {
+          console.error('Error processing WebSocket message:', error);
         }
-      } catch (error) {
-        console.error('Error fetching data:', error);
+      };
+
+      ws.onerror = (error) => {
+        console.error('WebSocket error:', error);
+        // Don't set connected to false immediately, wait for onclose
+      };
+
+      ws.onclose = (event) => {
+        console.log(`WebSocket disconnected: ${event.code} ${event.reason}`);
         setConnected(false);
-      } finally {
-        isPolling = false;
-      }
+        ws = null; // Ensure ws is nullified
+
+        // Attempt to reconnect after a delay
+        if (!reconnectTimeout) {
+          const reconnectDelay = 5000; // 5 seconds
+          console.log(`Attempting to reconnect WebSocket in ${reconnectDelay / 1000} seconds...`);
+          reconnectTimeout = setTimeout(connectWebSocket, reconnectDelay);
+        }
+      };
     };
-    
-    // Initial fetch
-    fetchData();
-    
-    // Get polling interval from environment variable or use default
-    const pollingInterval = parseInt(process.env.REACT_APP_POLLING_INTERVAL || '5000', 10);
-    console.log(`Setting up polling with interval: ${pollingInterval}ms`);
-    
-    // Set up polling interval
-    pollInterval = setInterval(fetchData, pollingInterval);
-    
-    // Clean up on unmount
+
+    connectWebSocket();
+
+    // Clean up on component unmount
     return () => {
-      if (pollInterval) {
-        clearInterval(pollInterval);
+      if (reconnectTimeout) {
+        clearTimeout(reconnectTimeout);
+      }
+      if (ws) {
+        console.log('Closing WebSocket connection on component unmount');
+        ws.close();
+        ws = null;
       }
     };
-  }, [monitoringStates]); // Add monitoringStates as dependency to update processing status when monitoring changes
+  }, []); // Empty dependency array ensures this runs only once on mount
 
   // Handle toggling monitoring for a device
   const toggleMonitoring = useCallback((device, state) => {
@@ -288,13 +211,10 @@ function App() {
         <div className="lg:col-span-3 bg-white shadow rounded-lg p-4">
           <h2 className="text-lg font-semibold mb-4">Processing Status</h2>
           {/* Log the data being passed to ProcessingStatusGrid */}
-          {console.log('Data passed to ProcessingStatusGrid:', {
-            statuses: data.processing_status.statuses
-          })}
-          {console.log('ProcessingStatusGrid data details:', JSON.stringify(data.processing_status.statuses))}
-          <ProcessingStatusGrid statuses={data.processing_status.statuses} />
+          {/* Removed console logs */}
+          <ProcessingStatusGrid statuses={data.processing_status ? data.processing_status.statuses : {}} />
         </div>
-        
+
         <div className="lg:col-span-1 bg-white shadow rounded-lg p-4">
           <h2 className="text-lg font-semibold mb-4">Success Rates</h2>
           <ChartsWidget 
@@ -307,17 +227,12 @@ function App() {
       <div className="mt-4 bg-white shadow rounded-lg p-4">
         <h2 className="text-lg font-semibold mb-4">Devices Online</h2>
         {/* Log the data being passed to PiStatusDisplay */}
-        {console.log('Data passed to PiStatusDisplay:', {
-          statuses: data.pi_status.statuses,
-          monitoringStates: monitoringStates
-        })}
-        {console.log('PiStatusDisplay data details:', JSON.stringify(data.pi_status.statuses))}
-        {console.log('PiStatusDisplay monitoringStates details:', JSON.stringify(monitoringStates))}
-        <PiStatusDisplay 
-          statuses={data.pi_status.statuses} 
-          monitoringStates={monitoringStates}
-          onToggleMonitoring={toggleMonitoring}
-        />
+          {/* Removed console logs */}
+          <PiStatusDisplay
+            statuses={data.pi_status ? data.pi_status.statuses : {}}
+            monitoringStates={monitoringStates}
+            onToggleMonitoring={toggleMonitoring}
+          />
       </div>
     </div>
   );
