@@ -77,44 +77,37 @@ function App() {
               console.log("WebSocket received H1 processing status:", h1ProcessingStatus);
             }
             // ---
-            // --- Force immutable update for nested state ---
+            // --- Simplified Immutable Update for processing_status ONLY ---
             setData(prevData => {
               const incomingData = message.data;
-              
-              // Create a completely new state object
-              const newState = {
-                ...prevData, // Copy existing top-level properties
-                // Overwrite with new top-level properties from message.data
-                // Exclude processing_status initially, handle it separately
-              };
-              
-              // Copy incoming top-level keys except processing_status
-              for (const key in incomingData) {
-                if (key !== 'processing_status') {
-                  newState[key] = incomingData[key];
-                }
-              }
+              const newProcessingStatuses = incomingData.processing_status?.statuses;
 
-              // Handle processing_status separately with deep copy/merge
-              if (incomingData.processing_status && incomingData.processing_status.statuses) {
-                newState.processing_status = {
-                  ...prevData.processing_status, // Keep other potential keys if any
-                  statuses: {
-                    ...prevData.processing_status.statuses, // Keep previous device statuses
-                    ...incomingData.processing_status.statuses // Overwrite with new device statuses
-                  }
+              // Only update if new processing status data exists
+              if (newProcessingStatuses) {
+                const newState = {
+                  ...prevData, // Keep all previous state
+                  processing_status: { // Create new processing_status object
+                     ...prevData.processing_status, // Keep other potential keys
+                     statuses: { // Create new statuses object
+                       ...prevData.processing_status.statuses, // Keep previous device statuses
+                       ...newProcessingStatuses // Overwrite with incoming statuses
+                     }
+                  },
+                  // Update timestamp as well
+                  timestamp: incomingData.timestamp || new Date().toISOString()
                 };
+                console.log("App.js state after setData for H1:", newState.processing_status?.statuses?.H1);
+                return newState;
               } else {
-                 // If no processing_status in message, keep the old one
-                 newState.processing_status = prevData.processing_status;
+                // If no processing_status in message, just update timestamp maybe? Or return prevData?
+                // Let's just update timestamp for consistency if message arrived
+                 const newState = {
+                     ...prevData,
+                     timestamp: incomingData.timestamp || new Date().toISOString()
+                 };
+                 console.log("App.js state after setData for H1 (no processing update):", newState.processing_status?.statuses?.H1);
+                 return newState; 
               }
-
-              // Update timestamp
-              newState.timestamp = incomingData.timestamp || new Date().toISOString();
-
-              // Log the state *after* update attempt
-              console.log("App.js state after setData for H1:", newState.processing_status?.statuses?.H1);
-              return newState; // Return the newly constructed state object
             });
           } else {
              console.log('Received unhandled WebSocket message type:', message.type);
