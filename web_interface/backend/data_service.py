@@ -52,6 +52,8 @@ class DataService:
             async with self._lock:
                 self.monitoring_states[device] = state
             logger.info(f"Set monitoring state for {device} to {state}")
+            # Add log AFTER update to check the dictionary content
+            logger.debug(f"Current monitoring_states after update in set_monitoring_state: {self.monitoring_states}")
 
     async def get_file_counts(self) -> Dict[str, Any]:
         """Get file counts for each Pi directory."""
