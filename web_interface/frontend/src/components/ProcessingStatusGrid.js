@@ -3,7 +3,10 @@ import React, { useEffect } from 'react';
 const ProcessingStatusGrid = ({ statuses }) => {
   // Log the props for debugging
   useEffect(() => {
-    console.log('ProcessingStatusGrid props:', { statuses });
+    // --- Add Logging: Log the specific status received for H1 ---
+    const h1Status = statuses?.H1;
+    console.log('ProcessingStatusGrid props for H1:', h1Status);
+    // console.log('ProcessingStatusGrid props (all):', { statuses }); // Optional: Log all
   }, [statuses]);
   // Define status colors
   const statusColors = {

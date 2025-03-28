@@ -68,12 +68,28 @@ function App() {
           // console.log('WebSocket message received:', message);
 
           if (message.type === 'all_data') {
-            // Directly use the data structure from the backend
-            setData(prevData => ({
-              ...prevData, // Keep existing title if not provided by WS
-              ...message.data, // Overwrite with new data from WebSocket
-              timestamp: message.data.timestamp || new Date().toISOString() // Ensure timestamp is updated
-            }));
+            // --- Add Logging: Check received processing status for H1 ---
+            const h1ProcessingStatus = message.data?.processing_status?.statuses?.H1;
+            if (h1ProcessingStatus) {
+              console.log("WebSocket received H1 processing status:", h1ProcessingStatus);
+            }
+            // ---
+            // Explicitly merge nested objects like processing_status
+            setData(prevData => {
+              const newData = {
+                ...prevData,
+                ...message.data, // Spread incoming data first
+                // Explicitly merge processing_status if it exists in the message
+                processing_status: message.data.processing_status 
+                  ? { ...prevData.processing_status, ...message.data.processing_status } 
+                  : prevData.processing_status,
+                // Ensure timestamp is always updated
+                timestamp: message.data.timestamp || new Date().toISOString() 
+              };
+              // Log the state *after* update attempt
+              console.log("App.js state after setData for H1:", newData.processing_status?.statuses?.H1); 
+              return newData;
+            });
           } else {
              console.log('Received unhandled WebSocket message type:', message.type);
           }
