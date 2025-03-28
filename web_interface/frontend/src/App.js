@@ -74,21 +74,30 @@ function App() {
               console.log("WebSocket received H1 processing status:", h1ProcessingStatus);
             }
             // ---
-            // Explicitly merge nested objects like processing_status
+            // Explicitly merge nested objects like processing_status.statuses
             setData(prevData => {
-              const newData = {
+              const incomingData = message.data;
+              const newProcessingStatuses = incomingData.processing_status?.statuses;
+
+              const mergedData = {
                 ...prevData,
-                ...message.data, // Spread incoming data first
-                // Explicitly merge processing_status if it exists in the message
-                processing_status: message.data.processing_status 
-                  ? { ...prevData.processing_status, ...message.data.processing_status } 
-                  : prevData.processing_status,
-                // Ensure timestamp is always updated
-                timestamp: message.data.timestamp || new Date().toISOString() 
+                ...incomingData, // Spread incoming data first (overwrites top-level keys like pi_status etc.)
+                // Deep merge processing_status.statuses if it exists in the message
+                processing_status: newProcessingStatuses
+                  ? { 
+                      ...prevData.processing_status, // Keep other potential keys in processing_status if any
+                      statuses: { 
+                        ...prevData.processing_status.statuses, // Keep existing device statuses
+                        ...newProcessingStatuses // Overwrite with new/updated device statuses from message
+                      } 
+                    }
+                  : prevData.processing_status, // Keep old processing_status if not in message
+                timestamp: incomingData.timestamp || new Date().toISOString()
               };
+
               // Log the state *after* update attempt
-              console.log("App.js state after setData for H1:", newData.processing_status?.statuses?.H1); 
-              return newData;
+              console.log("App.js state after setData for H1:", mergedData.processing_status?.statuses?.H1);
+              return mergedData;
             });
           } else {
              console.log('Received unhandled WebSocket message type:', message.type);
