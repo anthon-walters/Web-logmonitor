@@ -198,8 +198,9 @@ class FileMonitor:
                  if state.status != ProcessingStatus.DONE:
                       new_status = ProcessingStatus.DONE
             else:
-                 # If not stale and not PROCESSING, it's WAITING
-                 if state.status != ProcessingStatus.PROCESSING and state.status != ProcessingStatus.DONE:
+                 # If not stale, it should be WAITING (unless already DONE)
+                 # Remove the check for != ProcessingStatus.PROCESSING
+                 if state.status != ProcessingStatus.DONE:
                       new_status = ProcessingStatus.WAITING
         else: # current_count < state.last_count (should not happen ideally)
              self.logger.warning(f"[{pi_name}] Count decreased unexpectedly: {state.last_count} -> {current_count}")
