@@ -37,7 +37,8 @@ else:
     from file_monitor import FileMonitor
 
 # Configure logging
-logging.basicConfig(level=logging.INFO)
+# Set level to DEBUG to see detailed logs added for troubleshooting
+logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger("web_interface")
 
 # Create FastAPI app
