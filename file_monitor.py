@@ -391,9 +391,10 @@ class FileMonitor:
             self.logger.error(f"[{pi_name}] Unexpected error getting bib statistics: {str(e)}")
             raise FileMonitorError(f"Unexpected error getting bib statistics for {pi_name}: {e}") from e
 
-    def check_pi_status_and_get_data(self) -> Tuple[Dict[str, bool], List[Tuple[str, str, str]]]:
+    # Add monitoring_states parameter
+    def check_pi_status_and_get_data(self, monitoring_states: Dict[str, bool]) -> Tuple[Dict[str, bool], List[Tuple[str, str, str]]]:
         """
-        Check if each Raspberry Pi is accessible and get monitoring data.
+        Check if each Raspberry Pi is accessible (if monitored) and get monitoring data.
         Returns a tuple: (statuses_dict, monitoring_data_list)
         """
         statuses: Dict[str, bool] = {}
@@ -411,6 +412,14 @@ class FileMonitor:
         temp_monitoring_data = {f"H{i}": (f"H{i}", "0", "0") for i in range(1, 11)}
 
         for pi_name, ip_address in self.pi_addresses.items():
+            # --- Add Check: Skip if not monitored ---
+            if not monitoring_states.get(pi_name, True): # Default to True if somehow missing
+                self.logger.debug(f"Skipping status check for {pi_name} as monitoring is disabled.")
+                statuses[pi_name] = False # Mark as offline if not monitored for status purposes
+                temp_monitoring_data[pi_name] = (pi_name, "0", "0") # Ensure default data
+                continue
+            # --- End Check ---
+
             is_online = False
             processed_count = "0"
             uploaded_count = "0"
@@ -484,8 +493,9 @@ class FileMonitor:
 
     def get_pi_monitor_data(self, monitoring_states: Dict[str, bool]) -> List[Dict[str, Any]]:
         """Gets the processed/uploaded data, respecting monitoring states."""
-        _, raw_monitor_data = self.check_pi_status_and_get_data()
-
+        # Pass monitoring_states to the check function
+        _, raw_monitor_data = self.check_pi_status_and_get_data(monitoring_states)
+        
         result_data = []
         for device_id, processed, uploaded in raw_monitor_data:
              # Find the original pi_name (H1-H10) in case device_id is different

@@ -105,8 +105,8 @@ class DataService:
         
         # Run in a thread pool to avoid blocking
         loop = asyncio.get_event_loop()
-        # Use the new method which returns both status and monitor data
-        statuses, _ = await loop.run_in_executor(None, self.file_monitor.check_pi_status_and_get_data)
+        # Pass monitoring_states to the check function
+        statuses, _ = await loop.run_in_executor(None, self.file_monitor.check_pi_status_and_get_data, self.monitoring_states)
         
         # Also update internal processing state based on online status
         for pi_name, is_online in statuses.items():
