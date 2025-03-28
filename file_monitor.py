@@ -269,34 +269,62 @@ class FileMonitor:
         """Get total images count for a specific Pi."""
         url = f"http://{self.stats_server_host}:{self.stats_server_port}/statistics/{pi_name}"
         
+        # --- Add Logging ---
+        DEVICE_TO_DEBUG = "H3" # Replace with the device you are debugging
+        if pi_name == DEVICE_TO_DEBUG: self.logger.debug(f"[{pi_name}] Attempting to get total images from {url}")
+        # ---
         try:
             response = requests.get(url, timeout=20)
-            
+            # --- Add Logging ---
+            if pi_name == DEVICE_TO_DEBUG: self.logger.debug(f"[{pi_name}] Stats API response status: {response.status_code}")
+            # ---
+
             if response.status_code == 200:
                 try:
                     data = response.json()
+                    # --- Add Logging ---
+                    if pi_name == DEVICE_TO_DEBUG: self.logger.debug(f"[{pi_name}] Stats API response JSON parsed successfully.")
+                    # ---
                     total_images = data.get('total_images', 0)
-                    
+
                     # Update processing status
+                    # --- Add Logging ---
+                    if pi_name == DEVICE_TO_DEBUG: self.logger.debug(f"[{pi_name}] Calling update_processing_status with count={total_images}")
+                    # ---
                     self.update_processing_status(pi_name, total_images)
-                    
+
                     return total_images
                 except Exception as e:
+                    # --- Add Logging ---
+                    if pi_name == DEVICE_TO_DEBUG: self.logger.error(f"[{pi_name}] Error parsing JSON response from Stats API: {str(e)}")
+                    # ---
                     self.logger.error(f"[{pi_name}] Error parsing JSON response: {str(e)}")
                     # Raise error instead of returning 0
                     raise ApiResponseError(f"Failed to parse JSON response from statistics API for {pi_name}") from e
             else:
                 # Raise error for non-200 status
+                # --- Add Logging ---
+                if pi_name == DEVICE_TO_DEBUG: self.logger.error(f"[{pi_name}] Stats API returned non-200 status: {response.status_code}")
+                # ---
                 self.logger.error(f"[{pi_name}] Statistics API returned status {response.status_code}")
                 raise ApiResponseError(f"Statistics API for {pi_name} returned status {response.status_code}")
 
         except requests.exceptions.Timeout as e:
+            # --- Add Logging ---
+            if pi_name == DEVICE_TO_DEBUG: self.logger.error(f"[{pi_name}] Timeout calling Stats API: {e}")
+            # ---
             self.logger.error(f"[{pi_name}] Timeout getting statistics (20s): {e}")
             raise ApiTimeoutError(f"Timeout connecting to statistics API for {pi_name}") from e
         except requests.exceptions.ConnectionError as e:
+            # --- Add Logging ---
+            if pi_name == DEVICE_TO_DEBUG: self.logger.error(f"[{pi_name}] Connection error calling Stats API: {e}")
+            # ---
             self.logger.error(f"[{pi_name}] Connection error getting statistics: {e}")
             raise ApiConnectionError(f"Connection error connecting to statistics API for {pi_name}") from e
         except Exception as e: # Catch other potential requests errors or general issues
+            # --- Add Logging ---
+            if pi_name == DEVICE_TO_DEBUG: self.logger.error(f"[{pi_name}] Unexpected error calling Stats API: {str(e)}")
+            # ---
             self.logger.error(f"[{pi_name}] Unexpected error getting statistics: {str(e)}")
             # Re-raise as a FileMonitorError or specific API error if identifiable
             raise FileMonitorError(f"Unexpected error getting statistics for {pi_name}: {e}") from e
