@@ -7,7 +7,8 @@ const PiMonitorWidget = ({ data, monitoringStates }) => { // Add monitoringState
     // Keep the item if the device is monitored
     // Need to handle potential variations in item.device name if it's not always H1, H2 etc.
     // Assuming item.device is the key used in monitoringStates (e.g., "H1")
-    return monitoringStates[item.device] !== false; // Check against false explicitly
+    // Keep the item only if the device is explicitly monitored (state is true)
+    return monitoringStates[item.device] === true;
   });
 
   return (

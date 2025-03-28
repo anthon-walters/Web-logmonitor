@@ -4,8 +4,8 @@ const StatusWidget = ({ title, data, total, monitoringStates }) => { // Add moni
 
   // Filter data based on monitoringStates
   const filteredData = data.filter(item => {
-    // Keep the item if the device is monitored
-    return monitoringStates[item.device] !== false; // Check against false explicitly
+    // Keep the item only if the device is explicitly monitored (state is true)
+    return monitoringStates[item.device] === true;
   });
 
   // Recalculate total based on filtered data
