@@ -53,7 +53,7 @@ class DataService:
         # self.monitoring_states = {f"H{i}": True for i in range(1, 11)}
         self.last_statuses: Dict[str, bool] = {f"H{i}": False for i in range(1, 11)}
         self.last_monitoring_data: List[Tuple[str, str, str]] = [(f"H{i}", "0", "0") for i in range(1, 11)]
-        self._lock = asyncio.Lock() # Lock for updating last results (still useful)
+        self._lock = asyncio.Lock() # Lock for updating shared results
 
         # Initialize Redis connection
         try:
@@ -311,6 +311,16 @@ class DataService:
 
     async def get_all_data(self) -> Dict[str, Any]:
         """Get all data for the frontend."""
+        # Define default empty data structure first
+        default_data = {
+            "file_counts": {"counts": [], "total": 0},
+            "pi_status": {"statuses": {}},
+            "pi_statistics": {"sent": [], "tagged": [], "bibs": [], "totals": [0, 0, 0]},
+            "pi_monitor": {"data": []},
+            "success_rates": {"cv_rate": 0, "bib_rate": 0},
+            "processing_status": {"statuses": {}},
+            "timestamp": datetime.now().isoformat()
+        }
         try:
             # Ensure pi_status runs first to fetch and store latest status/monitor data
             pi_status = await self.get_pi_status()
@@ -333,17 +343,6 @@ class DataService:
 
             logger.debug("Sending all data to client")
 
-            # Define default empty data structure
-            default_data = {
-                "file_counts": {"counts": [], "total": 0},
-                "pi_status": {"statuses": {}},
-                "pi_statistics": {"sent": [], "tagged": [], "bibs": [], "totals": [0, 0, 0]},
-                "pi_monitor": {"data": []},
-                "success_rates": {"cv_rate": 0, "bib_rate": 0},
-                "processing_status": {"statuses": {}},
-                "timestamp": datetime.now().isoformat()
-            }
-
             # Combine all data safely
             combined_data = {
                 "file_counts": file_counts.get("data", default_data["file_counts"]),
@@ -361,22 +360,12 @@ class DataService:
             logger.error(f"FileMonitor error getting all data: {type(fm_error).__name__} - {str(fm_error)}")
             error_message = f"{type(fm_error).__name__}: {str(fm_error)}"
             # Return default empty data structure with error message
-            default_data = {
-                "file_counts": {"counts": [], "total": 0}, "pi_status": {"statuses": {}},
-                "pi_statistics": {"sent": [], "tagged": [], "bibs": [], "totals": [0, 0, 0]},
-                "pi_monitor": {"data": []}, "success_rates": {"cv_rate": 0, "bib_rate": 0},
-                "processing_status": {"statuses": {}}, "timestamp": datetime.now().isoformat(),
-                "error": error_message
-            }
-            return { "type": "all_data", "data": default_data }
+            error_data = default_data.copy()
+            error_data["error"] = error_message
+            return { "type": "all_data", "data": error_data }
         except Exception as e:
             logger.error(f"Unexpected error getting all data: {str(e)}", exc_info=True)
             # Return default empty data structure with error message
-            default_data = {
-                "file_counts": {"counts": [], "total": 0}, "pi_status": {"statuses": {}},
-                "pi_statistics": {"sent": [], "tagged": [], "bibs": [], "totals": [0, 0, 0]},
-                "pi_monitor": {"data": []}, "success_rates": {"cv_rate": 0, "bib_rate": 0},
-                "processing_status": {"statuses": {}}, "timestamp": datetime.now().isoformat(),
-                "error": str(e)
-            }
-            return { "type": "all_data", "data": default_data }
+            error_data = default_data.copy()
+            error_data["error"] = str(e)
+            return { "type": "all_data", "data": error_data }
