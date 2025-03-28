@@ -176,37 +176,60 @@ class FileMonitor:
         state = self.pi_states[pi_name]
         now = datetime.now()
         new_status = state.status # Keep current status unless changed
+        time_since_change = now - state.last_change_time # Calculate early for logging
+
+        # --- More Detailed Logging ---
+        # Log every call for a specific device, e.g., H3
+        # Replace "H3" with the actual device name you are debugging
+        DEVICE_TO_DEBUG = "H3" 
+        if pi_name == DEVICE_TO_DEBUG:
+            self.logger.debug(
+                f"[{pi_name}] update_processing_status CALLED. "
+                f"current_count={current_count}, state.last_count={state.last_count}, "
+                f"state.status={state.status.value}, state.last_change_time={state.last_change_time}, "
+                f"time_since_change={time_since_change}"
+            )
+        # --- End Logging ---
 
         if current_count > state.last_count:
             # Count increased - processing
             new_status = ProcessingStatus.PROCESSING
             state.last_change_time = now
+            # --- Log Change ---
+            if pi_name == DEVICE_TO_DEBUG: self.logger.debug(f"[{pi_name}] Count INCREASED. Setting status to PROCESSING. Updating last_change_time.")
+            # ---
         elif current_count == state.last_count:
             # Count unchanged - check time threshold
-            time_since_change = now - state.last_change_time
             # Use a configurable threshold (import from config if needed)
             stale_threshold_minutes = 10
             if time_since_change > timedelta(minutes=stale_threshold_minutes):
-                 # --- Add Logging ---
-                 # Log only if the status is about to change or is already DONE
                  if state.status != ProcessingStatus.DONE:
-                     self.logger.debug(f"[{pi_name}] Stale threshold met ({time_since_change}). Current status: {state.status.value}. Setting status to DONE.")
-                 elif pi_name == "H3": # Example: Log even if already DONE for a specific device
-                     self.logger.debug(f"[{pi_name}] Stale threshold met ({time_since_change}). Status already DONE.")
-                 # --- End Logging ---
-                 # If it's been stale for a while, mark as DONE
-                 if state.status != ProcessingStatus.DONE:
-                      new_status = ProcessingStatus.DONE
+                     # --- Log Change ---
+                     if pi_name == DEVICE_TO_DEBUG: self.logger.debug(f"[{pi_name}] Count STABLE > {stale_threshold_minutes}min. Setting status to DONE.")
+                     # ---
+                     new_status = ProcessingStatus.DONE
+                 # Removed previous debug log here as it's covered above
             else:
                  # If not stale, it should be WAITING (unless already DONE)
-                 # Remove the check for != ProcessingStatus.PROCESSING
                  if state.status != ProcessingStatus.DONE:
+                      # --- Log Change ---
+                      if state.status != ProcessingStatus.WAITING and pi_name == DEVICE_TO_DEBUG: self.logger.debug(f"[{pi_name}] Count STABLE < {stale_threshold_minutes}min. Setting status to WAITING.")
+                      # ---
                       new_status = ProcessingStatus.WAITING
-        else: # current_count < state.last_count (should not happen ideally)
+        else: # current_count < state.last_count
              self.logger.warning(f"[{pi_name}] Count decreased unexpectedly: {state.last_count} -> {current_count}")
              # Optionally reset status or handle as error
              new_status = ProcessingStatus.WAITING # Revert to waiting?
              state.last_change_time = now
+             # --- Log Change ---
+             if pi_name == DEVICE_TO_DEBUG: self.logger.debug(f"[{pi_name}] Count DECREASED. Setting status to WAITING. Updating last_change_time.")
+             # ---
+
+        # Log final decision before applying
+        if pi_name == DEVICE_TO_DEBUG and new_status != state.status:
+             self.logger.debug(f"[{pi_name}] FINAL DECISION: Changing status from {state.status.value} to {new_status.value}")
+        elif pi_name == DEVICE_TO_DEBUG:
+             self.logger.debug(f"[{pi_name}] FINAL DECISION: Status remains {state.status.value}")
 
         # Update state
         state.last_count = current_count
