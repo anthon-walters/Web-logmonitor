@@ -63,9 +63,12 @@ function App() {
       };
 
       ws.onmessage = (event) => {
+        // --- Add Logging: Log raw message received ---
+        console.log("Raw WebSocket message received:", event.data); 
+        // ---
         try {
           const message = JSON.parse(event.data);
-          // console.log('WebSocket message received:', message);
+          console.log('Parsed WebSocket message:', message); // Log parsed message
 
           if (message.type === 'all_data') {
             // --- Add Logging: Check received processing status for H1 ---
@@ -74,30 +77,38 @@ function App() {
               console.log("WebSocket received H1 processing status:", h1ProcessingStatus);
             }
             // ---
-            // Explicitly merge nested objects like processing_status.statuses
+            // Explicitly handle deep merge for processing_status.statuses
             setData(prevData => {
               const incomingData = message.data;
               const newProcessingStatuses = incomingData.processing_status?.statuses;
 
-              const mergedData = {
-                ...prevData,
-                ...incomingData, // Spread incoming data first (overwrites top-level keys like pi_status etc.)
-                // Deep merge processing_status.statuses if it exists in the message
-                processing_status: newProcessingStatuses
-                  ? { 
-                      ...prevData.processing_status, // Keep other potential keys in processing_status if any
-                      statuses: { 
-                        ...prevData.processing_status.statuses, // Keep existing device statuses
-                        ...newProcessingStatuses // Overwrite with new/updated device statuses from message
-                      } 
-                    }
-                  : prevData.processing_status, // Keep old processing_status if not in message
-                timestamp: incomingData.timestamp || new Date().toISOString()
-              };
+              // Start with previous data
+              const nextData = { ...prevData };
+
+              // Overwrite top-level keys from incoming data
+              Object.keys(incomingData).forEach(key => {
+                if (key !== 'processing_status') { // Handle processing_status separately
+                  nextData[key] = incomingData[key];
+                }
+              });
+
+              // Deep merge processing_status.statuses
+              if (newProcessingStatuses) {
+                nextData.processing_status = {
+                  ...prevData.processing_status, // Keep potential other keys in processing_status
+                  statuses: {
+                    ...prevData.processing_status.statuses, // Keep previous statuses
+                    ...newProcessingStatuses // Overwrite with new statuses
+                  }
+                };
+              }
+              
+              // Update timestamp
+              nextData.timestamp = incomingData.timestamp || new Date().toISOString();
 
               // Log the state *after* update attempt
-              console.log("App.js state after setData for H1:", mergedData.processing_status?.statuses?.H1);
-              return mergedData;
+              console.log("App.js state after setData for H1:", nextData.processing_status?.statuses?.H1);
+              return nextData;
             });
           } else {
              console.log('Received unhandled WebSocket message type:', message.type);
