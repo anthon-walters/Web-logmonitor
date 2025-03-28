@@ -77,38 +77,44 @@ function App() {
               console.log("WebSocket received H1 processing status:", h1ProcessingStatus);
             }
             // ---
-            // Explicitly handle deep merge for processing_status.statuses
+            // --- Force immutable update for nested state ---
             setData(prevData => {
               const incomingData = message.data;
-              const newProcessingStatuses = incomingData.processing_status?.statuses;
-
-              // Start with previous data
-              const nextData = { ...prevData };
-
-              // Overwrite top-level keys from incoming data
-              Object.keys(incomingData).forEach(key => {
-                if (key !== 'processing_status') { // Handle processing_status separately
-                  nextData[key] = incomingData[key];
+              
+              // Create a completely new state object
+              const newState = {
+                ...prevData, // Copy existing top-level properties
+                // Overwrite with new top-level properties from message.data
+                // Exclude processing_status initially, handle it separately
+              };
+              
+              // Copy incoming top-level keys except processing_status
+              for (const key in incomingData) {
+                if (key !== 'processing_status') {
+                  newState[key] = incomingData[key];
                 }
-              });
+              }
 
-              // Deep merge processing_status.statuses
-              if (newProcessingStatuses) {
-                nextData.processing_status = {
-                  ...prevData.processing_status, // Keep potential other keys in processing_status
+              // Handle processing_status separately with deep copy/merge
+              if (incomingData.processing_status && incomingData.processing_status.statuses) {
+                newState.processing_status = {
+                  ...prevData.processing_status, // Keep other potential keys if any
                   statuses: {
-                    ...prevData.processing_status.statuses, // Keep previous statuses
-                    ...newProcessingStatuses // Overwrite with new statuses
+                    ...prevData.processing_status.statuses, // Keep previous device statuses
+                    ...incomingData.processing_status.statuses // Overwrite with new device statuses
                   }
                 };
+              } else {
+                 // If no processing_status in message, keep the old one
+                 newState.processing_status = prevData.processing_status;
               }
-              
+
               // Update timestamp
-              nextData.timestamp = incomingData.timestamp || new Date().toISOString();
+              newState.timestamp = incomingData.timestamp || new Date().toISOString();
 
               // Log the state *after* update attempt
-              console.log("App.js state after setData for H1:", nextData.processing_status?.statuses?.H1);
-              return nextData;
+              console.log("App.js state after setData for H1:", newState.processing_status?.statuses?.H1);
+              return newState; // Return the newly constructed state object
             });
           } else {
              console.log('Received unhandled WebSocket message type:', message.type);
