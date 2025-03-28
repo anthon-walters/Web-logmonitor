@@ -178,25 +178,14 @@ class FileMonitor:
         new_status = state.status # Keep current status unless changed
         time_since_change = now - state.last_change_time # Calculate early for logging
 
-        # --- More Detailed Logging ---
-        # Log every call for a specific device, e.g., H1
-        # Replace "H1" with the actual device name you are debugging
-        DEVICE_TO_DEBUG = "H1" 
-        if pi_name == DEVICE_TO_DEBUG:
-            self.logger.debug(
-                f"[{pi_name}] update_processing_status CALLED. "
-                f"current_count={current_count}, state.last_count={state.last_count}, "
-                f"state.status={state.status.value}, state.last_change_time={state.last_change_time}, "
-                f"time_since_change={time_since_change}"
-            )
+        # --- More Detailed Logging --- REMOVED
         # --- End Logging ---
 
         if current_count > state.last_count:
             # Count increased - processing
             new_status = ProcessingStatus.PROCESSING
             state.last_change_time = now
-            # --- Log Change ---
-            if pi_name == DEVICE_TO_DEBUG: self.logger.debug(f"[{pi_name}] Count INCREASED. Setting status to PROCESSING. Updating last_change_time.")
+            # --- Log Change --- REMOVED
             # ---
         elif current_count == state.last_count:
             # Count unchanged - check time threshold
@@ -204,16 +193,14 @@ class FileMonitor:
             stale_threshold_minutes = 1 # Changed from 10 for faster testing
             if time_since_change > timedelta(minutes=stale_threshold_minutes):
                  if state.status != ProcessingStatus.DONE:
-                     # --- Log Change ---
-                     if pi_name == DEVICE_TO_DEBUG: self.logger.debug(f"[{pi_name}] Count STABLE > {stale_threshold_minutes}min. Setting status to DONE.")
+                     # --- Log Change --- REMOVED
                      # ---
                      new_status = ProcessingStatus.DONE
                  # Removed previous debug log here as it's covered above
             else:
                  # If not stale, it should be WAITING (unless already DONE)
                  if state.status != ProcessingStatus.DONE:
-                      # --- Log Change ---
-                      if state.status != ProcessingStatus.WAITING and pi_name == DEVICE_TO_DEBUG: self.logger.debug(f"[{pi_name}] Count STABLE < {stale_threshold_minutes}min. Setting status to WAITING.")
+                      # --- Log Change --- REMOVED
                       # ---
                       new_status = ProcessingStatus.WAITING
         else: # current_count < state.last_count
@@ -221,15 +208,10 @@ class FileMonitor:
              # Optionally reset status or handle as error
              new_status = ProcessingStatus.WAITING # Revert to waiting?
              state.last_change_time = now
-             # --- Log Change ---
-             if pi_name == DEVICE_TO_DEBUG: self.logger.debug(f"[{pi_name}] Count DECREASED. Setting status to WAITING. Updating last_change_time.")
+             # --- Log Change --- REMOVED
              # ---
 
-        # Log final decision before applying
-        if pi_name == DEVICE_TO_DEBUG and new_status != state.status:
-             self.logger.debug(f"[{pi_name}] FINAL DECISION: Changing status from {state.status.value} to {new_status.value}")
-        elif pi_name == DEVICE_TO_DEBUG:
-             self.logger.debug(f"[{pi_name}] FINAL DECISION: Status remains {state.status.value}")
+        # Log final decision before applying - REMOVED
 
         # Update state
         state.last_count = current_count
@@ -269,61 +251,51 @@ class FileMonitor:
         """Get total images count for a specific Pi."""
         url = f"http://{self.stats_server_host}:{self.stats_server_port}/statistics/{pi_name}"
         
-        # --- Add Logging ---
-        DEVICE_TO_DEBUG = "H3" # Replace with the device you are debugging
-        if pi_name == DEVICE_TO_DEBUG: self.logger.debug(f"[{pi_name}] Attempting to get total images from {url}")
+        # --- Add Logging --- REMOVED
         # ---
         try:
             response = requests.get(url, timeout=20)
-            # --- Add Logging ---
-            if pi_name == DEVICE_TO_DEBUG: self.logger.debug(f"[{pi_name}] Stats API response status: {response.status_code}")
+            # --- Add Logging --- REMOVED
             # ---
 
             if response.status_code == 200:
                 try:
                     data = response.json()
-                    # --- Add Logging ---
-                    if pi_name == DEVICE_TO_DEBUG: self.logger.debug(f"[{pi_name}] Stats API response JSON parsed successfully.")
+                    # --- Add Logging --- REMOVED
                     # ---
                     total_images = data.get('total_images', 0)
 
                     # Update processing status
-                    # --- Add Logging ---
-                    if pi_name == DEVICE_TO_DEBUG: self.logger.debug(f"[{pi_name}] Calling update_processing_status with count={total_images}")
+                    # --- Add Logging --- REMOVED
                     # ---
                     self.update_processing_status(pi_name, total_images)
 
                     return total_images
                 except Exception as e:
-                    # --- Add Logging ---
-                    if pi_name == DEVICE_TO_DEBUG: self.logger.error(f"[{pi_name}] Error parsing JSON response from Stats API: {str(e)}")
+                    # --- Add Logging --- REMOVED
                     # ---
                     self.logger.error(f"[{pi_name}] Error parsing JSON response: {str(e)}")
                     # Raise error instead of returning 0
                     raise ApiResponseError(f"Failed to parse JSON response from statistics API for {pi_name}") from e
             else:
                 # Raise error for non-200 status
-                # --- Add Logging ---
-                if pi_name == DEVICE_TO_DEBUG: self.logger.error(f"[{pi_name}] Stats API returned non-200 status: {response.status_code}")
+                # --- Add Logging --- REMOVED
                 # ---
                 self.logger.error(f"[{pi_name}] Statistics API returned status {response.status_code}")
                 raise ApiResponseError(f"Statistics API for {pi_name} returned status {response.status_code}")
 
         except requests.exceptions.Timeout as e:
-            # --- Add Logging ---
-            if pi_name == DEVICE_TO_DEBUG: self.logger.error(f"[{pi_name}] Timeout calling Stats API: {e}")
+            # --- Add Logging --- REMOVED
             # ---
             self.logger.error(f"[{pi_name}] Timeout getting statistics (20s): {e}")
             raise ApiTimeoutError(f"Timeout connecting to statistics API for {pi_name}") from e
         except requests.exceptions.ConnectionError as e:
-            # --- Add Logging ---
-            if pi_name == DEVICE_TO_DEBUG: self.logger.error(f"[{pi_name}] Connection error calling Stats API: {e}")
+            # --- Add Logging --- REMOVED
             # ---
             self.logger.error(f"[{pi_name}] Connection error getting statistics: {e}")
             raise ApiConnectionError(f"Connection error connecting to statistics API for {pi_name}") from e
         except Exception as e: # Catch other potential requests errors or general issues
-            # --- Add Logging ---
-            if pi_name == DEVICE_TO_DEBUG: self.logger.error(f"[{pi_name}] Unexpected error calling Stats API: {str(e)}")
+            # --- Add Logging --- REMOVED
             # ---
             self.logger.error(f"[{pi_name}] Unexpected error getting statistics: {str(e)}")
             # Re-raise as a FileMonitorError or specific API error if identifiable

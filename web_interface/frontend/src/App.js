@@ -77,42 +77,32 @@ function App() {
               console.log("WebSocket received H1 processing status:", h1ProcessingStatus);
             }
             // ---
-            // --- Explicit Immutable Update for nested state ---
+            // --- Force full immutable update ---
             setData(prevData => {
               const incomingData = message.data;
-              const newProcessingStatuses = incomingData.processing_status?.statuses;
-
-              // Start with previous data
-              const newState = { ...prevData };
-
-              // Overwrite top-level keys from incoming data
-              Object.keys(incomingData).forEach(key => {
-                if (key !== 'processing_status') { // Handle processing_status separately
-                  newState[key] = incomingData[key];
-                }
-              });
-
-              // Deep merge processing_status.statuses
-              if (newProcessingStatuses) {
-                newState.processing_status = {
-                  ...prevData.processing_status, // Keep potential other keys in processing_status
-                  statuses: {
-                    ...prevData.processing_status.statuses, // Keep previous statuses
-                    ...newProcessingStatuses // Overwrite with new statuses
-                  }
-                };
-              } else {
-                 // If no processing_status in message, keep the old one
-                 newState.processing_status = prevData.processing_status;
-              }
-
-              // Update timestamp
-              newState.timestamp = incomingData.timestamp || new Date().toISOString();
+              
+              // Create a completely new state object by merging
+              const newState = {
+                ...prevData, // Start with previous state
+                ...incomingData, // Overwrite with all incoming top-level data
+                // Ensure processing_status is handled immutably if present
+                processing_status: incomingData.processing_status
+                  ? {
+                      ...prevData.processing_status, // Keep other potential keys
+                      statuses: { // Create new statuses object
+                        ...prevData.processing_status.statuses, // Keep old statuses
+                        ...incomingData.processing_status.statuses // Overwrite with new ones
+                      }
+                    }
+                  : prevData.processing_status, // Keep old if not in incoming data
+                // Always update timestamp
+                timestamp: incomingData.timestamp || new Date().toISOString()
+              };
 
               // Log the state *after* update attempt
               const finalH1Status = newState.processing_status?.statuses?.H1;
-              console.log(`App.js state after setData for H1 (update applied): status=${finalH1Status?.status}, count=${finalH1Status?.count}`);
-              return newState; // Return the newly constructed state object
+              console.log(`App.js state after setData for H1: status=${finalH1Status?.status}, count=${finalH1Status?.count}`);
+              return newState; 
             });
           } else {
              console.log('Received unhandled WebSocket message type:', message.type);
@@ -248,8 +238,7 @@ function App() {
           monitoringStates={monitoringStates}
         />
         <PiMonitorWidget data={data.pi_monitor.data} monitoringStates={monitoringStates} />
-      </div>
-
+      </div>ugging.
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
         <div className="lg:col-span-3 bg-white shadow rounded-lg p-4">
           <h2 className="text-lg font-semibold mb-4">Processing Status</h2>
