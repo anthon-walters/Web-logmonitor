@@ -21,7 +21,7 @@ function App() {
     timestamp: null,
     title: "Web Log Monitor"
   });
-  
+
   const [connected, setConnected] = useState(false);
   const [monitoringStates, setMonitoringStates] = useState({});
 
@@ -64,7 +64,7 @@ function App() {
 
       ws.onmessage = (event) => {
         // --- Add Logging: Log raw message received ---
-        console.log("Raw WebSocket message received:", event.data); 
+        console.log("Raw WebSocket message received:", event.data);
         // ---
         try {
           const message = JSON.parse(event.data);
@@ -77,37 +77,42 @@ function App() {
               console.log("WebSocket received H1 processing status:", h1ProcessingStatus);
             }
             // ---
-            // --- Simplified Immutable Update for processing_status ONLY ---
+            // --- Explicit Immutable Update for nested state ---
             setData(prevData => {
               const incomingData = message.data;
               const newProcessingStatuses = incomingData.processing_status?.statuses;
 
-              // Only update if new processing status data exists
+              // Start with previous data
+              const newState = { ...prevData };
+
+              // Overwrite top-level keys from incoming data
+              Object.keys(incomingData).forEach(key => {
+                if (key !== 'processing_status') { // Handle processing_status separately
+                  newState[key] = incomingData[key];
+                }
+              });
+
+              // Deep merge processing_status.statuses
               if (newProcessingStatuses) {
-                const newState = {
-                  ...prevData, // Keep all previous state
-                  processing_status: { // Create new processing_status object
-                     ...prevData.processing_status, // Keep other potential keys
-                     statuses: { // Create new statuses object
-                       ...prevData.processing_status.statuses, // Keep previous device statuses
-                       ...newProcessingStatuses // Overwrite with incoming statuses
-                     }
-                  },
-                  // Update timestamp as well
-                  timestamp: incomingData.timestamp || new Date().toISOString()
+                newState.processing_status = {
+                  ...prevData.processing_status, // Keep potential other keys in processing_status
+                  statuses: {
+                    ...prevData.processing_status.statuses, // Keep previous statuses
+                    ...newProcessingStatuses // Overwrite with new statuses
+                  }
                 };
-                console.log("App.js state after setData for H1:", newState.processing_status?.statuses?.H1);
-                return newState;
               } else {
-                // If no processing_status in message, just update timestamp maybe? Or return prevData?
-                // Let's just update timestamp for consistency if message arrived
-                 const newState = {
-                     ...prevData,
-                     timestamp: incomingData.timestamp || new Date().toISOString()
-                 };
-                 console.log("App.js state after setData for H1 (no processing update):", newState.processing_status?.statuses?.H1);
-                 return newState; 
+                 // If no processing_status in message, keep the old one
+                 newState.processing_status = prevData.processing_status;
               }
+
+              // Update timestamp
+              newState.timestamp = incomingData.timestamp || new Date().toISOString();
+
+              // Log the state *after* update attempt
+              const finalH1Status = newState.processing_status?.statuses?.H1;
+              console.log(`App.js state after setData for H1 (update applied): status=${finalH1Status?.status}, count=${finalH1Status?.count}`);
+              return newState; // Return the newly constructed state object
             });
           } else {
              console.log('Received unhandled WebSocket message type:', message.type);
@@ -157,23 +162,23 @@ function App() {
       ...prev,
       [device]: state
     }));
-    
+
     // In development mode, connect directly to the backend API
     const apiBaseUrl = process.env.NODE_ENV === 'production'
       ? ''
       : 'http://localhost:7171';
-    
+
     // Send update to server with authentication
     const username = process.env.REACT_APP_API_USERNAME || 'admin';
     const password = process.env.REACT_APP_API_PASSWORD || 'changeme';
-    
+
     // Get API timeout from environment variable or use default
     const apiTimeout = parseInt(process.env.REACT_APP_API_TIMEOUT || '10000', 10);
-    
+
     // Create AbortController for timeout
     const controller = new AbortController();
     setTimeout(() => controller.abort(), apiTimeout);
-    
+
     fetch(`${apiBaseUrl}/api/monitoring/${device}?state=${state}`, {
       method: 'POST',
       headers: {
@@ -220,31 +225,31 @@ function App() {
           )}
         </div>
       </header>
-      
-      
+
+
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-4 mb-4">
         <FileCountWidget data={data.file_counts} monitoringStates={monitoringStates} />
-        <StatusWidget 
-          title="JPG files sent for Tagging" 
-          data={data.pi_statistics.sent} 
-          total={data.pi_statistics.totals[0]} 
-          monitoringStates={monitoringStates} 
+        <StatusWidget
+          title="JPG files sent for Tagging"
+          data={data.pi_statistics.sent}
+          total={data.pi_statistics.totals[0]}
+          monitoringStates={monitoringStates}
         />
-        <StatusWidget 
-          title="JPG files tagged" 
-          data={data.pi_statistics.tagged} 
-          total={data.pi_statistics.totals[1]} 
-          monitoringStates={monitoringStates} 
+        <StatusWidget
+          title="JPG files tagged"
+          data={data.pi_statistics.tagged}
+          total={data.pi_statistics.totals[1]}
+          monitoringStates={monitoringStates}
         />
-        <StatusWidget 
-          title="Bibs found" 
-          data={data.pi_statistics.bibs} 
-          total={data.pi_statistics.totals[2]} 
-          monitoringStates={monitoringStates} 
+        <StatusWidget
+          title="Bibs found"
+          data={data.pi_statistics.bibs}
+          total={data.pi_statistics.totals[2]}
+          monitoringStates={monitoringStates}
         />
         <PiMonitorWidget data={data.pi_monitor.data} monitoringStates={monitoringStates} />
       </div>
-      
+
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
         <div className="lg:col-span-3 bg-white shadow rounded-lg p-4">
           <h2 className="text-lg font-semibold mb-4">Processing Status</h2>
@@ -255,13 +260,13 @@ function App() {
 
         <div className="lg:col-span-1 bg-white shadow rounded-lg p-4">
           <h2 className="text-lg font-semibold mb-4">Success Rates</h2>
-          <ChartsWidget 
-            cvRate={data.success_rates.cv_rate} 
-            bibRate={data.success_rates.bib_rate} 
+          <ChartsWidget
+            cvRate={data.success_rates.cv_rate}
+            bibRate={data.success_rates.bib_rate}
           />
         </div>
       </div>
-      
+
       <div className="mt-4 bg-white shadow rounded-lg p-4">
         <h2 className="text-lg font-semibold mb-4">Devices Online</h2>
         {/* Log the data being passed to PiStatusDisplay */}
