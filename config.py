@@ -17,7 +17,8 @@ API_HOST = "0.0.0.0"
 API_PORT = int(os.getenv('API_PORT', '8000'))
 
 # Statistics Server Settings
-STATS_SERVER_HOST = os.getenv('STATS_SERVER_HOST', 'localhost')
+# Explicitly set to the server's IP where both apps are running, if not set by env var
+STATS_SERVER_HOST = os.getenv('STATS_SERVER_HOST', '192.168.0.50') 
 STATS_SERVER_PORT = int(os.getenv('STATS_SERVER_PORT', '8000'))
 
 # Field Device Settings
