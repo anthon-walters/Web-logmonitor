@@ -400,7 +400,7 @@ class FileMonitor:
         statuses: Dict[str, bool] = {}
         monitoring_data: List[Tuple[str, str, str]] = []
 
-        self.logger.debug("Starting Pi status and data check")
+        # self.logger.debug("Starting Pi status and data check") # Commented out noisy log
 
         # Initialize statuses and data for all potential devices
         for i in range(1, 11):
@@ -430,20 +430,20 @@ class FileMonitor:
             try:
                 # 1. Health Check
                 health_url = f"http://{ip_address}:{self.field_device_port}/health"
-                self.logger.debug(f"Checking health for {pi_name} at {health_url}")
+                # self.logger.debug(f"Checking health for {pi_name} at {health_url}") # Commented out noisy log
                 health_response = requests.get(health_url, timeout=5)
-                self.logger.debug(f"{pi_name} health response status: {health_response.status_code}")
+                # self.logger.debug(f"{pi_name} health response status: {health_response.status_code}") # Commented out noisy log
 
                 if health_response.status_code == 200:
                     health_data = health_response.json()
                     if health_data.get('status') == 'healthy':
                         is_online = True
-                        self.logger.debug(f"{pi_name} is healthy.")
+                        # self.logger.debug(f"{pi_name} is healthy.") # Commented out noisy log
 
                         # 2. Get Main Data if Healthy
                         try:
                             main_url = f"http://{ip_address}:{self.field_device_port}/"
-                            self.logger.debug(f"Getting main data for {pi_name} at {main_url}")
+                            # self.logger.debug(f"Getting main data for {pi_name} at {main_url}") # Commented out noisy log
                             main_response = requests.get(
                                 main_url,
                                 auth=HTTPBasicAuth(self.api_username, self.api_password),
