@@ -414,8 +414,8 @@ class FileMonitor:
         for pi_name, ip_address in self.pi_addresses.items():
             # --- Add Check: Skip if not monitored ---
             is_monitored = monitoring_states.get(pi_name, True) # Default to True if somehow missing
-            # Add logging here to see the check result
-            # self.logger.debug(f"[{pi_name}] Check: monitoring_states.get result = {is_monitored}") 
+            # Add logging here to see the check result RIGHT BEFORE the 'if'
+            self.logger.debug(f"[{pi_name}] Inside check_pi_status_and_get_data: Evaluating is_monitored = {is_monitored}") 
             if not is_monitored: 
                 statuses[pi_name] = False # Mark as offline if not monitored for status purposes
                 temp_monitoring_data[pi_name] = (pi_name, "0", "0") # Ensure default data
