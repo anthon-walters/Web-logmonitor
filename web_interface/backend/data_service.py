@@ -354,6 +354,13 @@ class DataService:
                 "timestamp": datetime.now().isoformat()
             }
 
+            # --- Add Logging: Log the actual combined data being sent ---
+            # Specifically log the processing status part for H1
+            h1_processing_status = combined_data.get("processing_status", {}).get("statuses", {}).get("H1", "H1 data missing")
+            logger.debug(f"Sending all_data content for H1 processing: {h1_processing_status}")
+            # logger.debug(f"Sending all_data content: {combined_data}") # Optional: Log everything (can be large)
+            # ---
+
             return { "type": "all_data", "data": combined_data }
 
         except (ApiConnectionError, ApiTimeoutError, ApiResponseError, ShareConnectionError, FileMonitorError) as fm_error:
