@@ -7,3 +7,4 @@ fastapi>=0.95.0
 uvicorn>=0.21.0
 websockets>=11.0.0
 gunicorn>=20.1.0 # Added for production deployment on Linux
+redis>=4.3.0 # Added for shared state management
