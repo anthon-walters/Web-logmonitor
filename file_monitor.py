@@ -179,9 +179,9 @@ class FileMonitor:
         time_since_change = now - state.last_change_time # Calculate early for logging
 
         # --- More Detailed Logging ---
-        # Log every call for a specific device, e.g., H3
-        # Replace "H3" with the actual device name you are debugging
-        DEVICE_TO_DEBUG = "H3" 
+        # Log every call for a specific device, e.g., H1
+        # Replace "H1" with the actual device name you are debugging
+        DEVICE_TO_DEBUG = "H1" 
         if pi_name == DEVICE_TO_DEBUG:
             self.logger.debug(
                 f"[{pi_name}] update_processing_status CALLED. "
