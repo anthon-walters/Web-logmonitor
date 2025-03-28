@@ -201,7 +201,7 @@ class FileMonitor:
         elif current_count == state.last_count:
             # Count unchanged - check time threshold
             # Use a configurable threshold (import from config if needed)
-            stale_threshold_minutes = 10
+            stale_threshold_minutes = 1 # Changed from 10 for faster testing
             if time_since_change > timedelta(minutes=stale_threshold_minutes):
                  if state.status != ProcessingStatus.DONE:
                      # --- Log Change ---
