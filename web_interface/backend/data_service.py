@@ -192,9 +192,9 @@ class DataService:
                 self.last_monitoring_data = monitoring_data
 
             # Update internal processing state based on online status and Redis state
-            current_monitoring_states_for_update = self._get_all_monitoring_states_sync() # Get latest again
+            # Use the 'current_states' fetched at the start of this function call
             for pi_name, is_online in statuses.items():
-                 if not is_online and current_monitoring_states_for_update.get(pi_name, True):
+                 if not is_online and current_states.get(pi_name, True): # Check against the state used for the check
                       if pi_name in self.file_monitor.pi_states:
                            if self.file_monitor.pi_states[pi_name].status != ProcessingStatus.DISABLED:
                                 self.file_monitor.pi_states[pi_name].status = ProcessingStatus.OFFLINE
