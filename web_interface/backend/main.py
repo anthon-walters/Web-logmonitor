@@ -37,9 +37,21 @@ else:
     from file_monitor import FileMonitor
 
 # Configure logging
-# Set level to DEBUG to see detailed logs added for troubleshooting
-logging.basicConfig(level=logging.DEBUG)
-logger = logging.getLogger("web_interface")
+# Set root logger level - basicConfig might be called elsewhere or by libraries
+logging.basicConfig(level=logging.INFO) # Keep basicConfig less verbose initially
+# Get the specific loggers we want to be verbose
+file_monitor_logger = logging.getLogger('FileMonitor')
+file_monitor_logger.setLevel(logging.DEBUG)
+data_service_logger = logging.getLogger('data_service')
+data_service_logger.setLevel(logging.DEBUG) # Optional: Make data_service verbose too
+web_interface_logger = logging.getLogger('web_interface')
+web_interface_logger.setLevel(logging.DEBUG) # Make main app logger verbose
+
+# Ensure handlers are present (basicConfig usually adds one, but let's be sure)
+if not logging.getLogger().hasHandlers():
+    logging.basicConfig(level=logging.DEBUG) # Fallback if no handlers exist
+
+logger = web_interface_logger # Use the specific logger for this file
 
 # Create FastAPI app
 app = FastAPI(title="Web Log Monitor API")
