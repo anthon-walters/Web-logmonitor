@@ -415,8 +415,10 @@ class FileMonitor:
             # --- Add Check: Skip if not monitored ---
             is_monitored = monitoring_states.get(pi_name, True) # Default to True if somehow missing
             # Add logging here to see the check result RIGHT BEFORE the 'if'
-            self.logger.debug(f"[{pi_name}] Inside check_pi_status_and_get_data: Evaluating is_monitored = {is_monitored}") 
-            if not is_monitored: 
+            self.logger.debug(f"[{pi_name}] Inside check_pi_status_and_get_data: Evaluating is_monitored = {is_monitored}")
+            if not is_monitored:
+                # Add log INSIDE the if block
+                self.logger.debug(f"[{pi_name}] Condition 'not is_monitored' is TRUE. Should execute continue.")
                 statuses[pi_name] = False # Mark as offline if not monitored for status purposes
                 temp_monitoring_data[pi_name] = (pi_name, "0", "0") # Ensure default data
                 continue
@@ -495,8 +497,10 @@ class FileMonitor:
 
     def get_pi_monitor_data(self, monitoring_states: Dict[str, bool]) -> List[Dict[str, Any]]:
         """Gets the processed/uploaded data, respecting monitoring states."""
-        # Pass monitoring_states to the check function
-        _, raw_monitor_data = self.check_pi_status_and_get_data(monitoring_states)
+        # Pass a COPY of monitoring_states to the check function
+        states_copy = monitoring_states.copy()
+        # self.logger.debug(f"get_pi_monitor_data calling check_pi_status_and_get_data with copy: {states_copy}") # Optional logging
+        _, raw_monitor_data = self.check_pi_status_and_get_data(states_copy)
         
         result_data = []
         for device_id, processed, uploaded in raw_monitor_data:
