@@ -198,8 +198,8 @@ def get_pi_status(_: str = Depends(get_current_username)):
          raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=f"Share connection error: {e}")
 
     try:
-        # Use the method that returns both, ignore monitor data here
-        statuses, _ = file_monitor.check_pi_status_and_get_data()
+        # Pass the monitoring states from the data_service instance
+        statuses, _ = file_monitor.check_pi_status_and_get_data(data_service.monitoring_states)
         logger.info(f"Pi status API called - returning statuses: {statuses}")
         return {"statuses": statuses}
     # Note: check_pi_status_and_get_data logs errors but doesn't raise them by default
