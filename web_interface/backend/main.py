@@ -15,7 +15,8 @@ from datetime import datetime
 from .websocket_service import WebSocketService # Relative import
 from .data_service import DataService # Relative import
 # Import custom exceptions from file_monitor
-from windows_file_monitor import FileMonitorError, ApiConnectionError, ApiTimeoutError, ApiResponseError, ShareConnectionError
+# Use the correct FileMonitor based on platform later
+# from windows_file_monitor import FileMonitorError, ApiConnectionError, ApiTimeoutError, ApiResponseError, ShareConnectionError
 
 # Add parent directory to path to import from the main application
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
@@ -30,11 +31,11 @@ from config import (
     WEB_INTERFACE_TITLE
 )
 
-# Import the file monitor
+# Import the file monitor and its exceptions
 if sys.platform == 'win32':
-    from windows_file_monitor import FileMonitor
+    from windows_file_monitor import FileMonitor, FileMonitorError, ApiConnectionError, ApiTimeoutError, ApiResponseError, ShareConnectionError
 else:
-    from file_monitor import FileMonitor
+    from file_monitor import FileMonitor, FileMonitorError, ApiConnectionError, ApiTimeoutError, ApiResponseError, ShareConnectionError
 
 # Configure logging
 # Set root logger level - basicConfig might be called elsewhere or by libraries
@@ -72,14 +73,15 @@ security = HTTPBasic()
 file_monitor = FileMonitor()
 
 # Initialize services
+data_service = DataService(file_monitor) # Pass file_monitor instance
 websocket_service = WebSocketService()
-data_service = DataService(file_monitor)
+
 
 # Authentication dependency (can be used for WebSocket too if needed)
 def get_current_username(credentials: HTTPBasicCredentials = Depends(security)):
     correct_username = API_USERNAME
     correct_password = API_PASSWORD
-    
+
     if credentials.username != correct_username or credentials.password != correct_password:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -121,6 +123,8 @@ def get_title(_: str = Depends(get_current_username)):
 @api_router.get("/debug")
 def get_debug_info(): # No auth needed for debug usually
     """Get debug information about the API."""
+    # Fetch current monitoring states from DataService (which reads from Redis)
+    current_monitoring_states = data_service._get_all_monitoring_states_sync()
     return {
         "file_monitor_connected": file_monitor.is_connected(),
         "base_path": file_monitor.base_path,
@@ -128,7 +132,7 @@ def get_debug_info(): # No auth needed for debug usually
         "stats_server_host": STATS_SERVER_HOST,
         "stats_server_port": STATS_SERVER_PORT,
         "pi_addresses": file_monitor.pi_addresses,
-        "monitoring_states": data_service.monitoring_states,
+        "monitoring_states": current_monitoring_states, # Use state fetched from Redis
         "timestamp": datetime.now().isoformat()
     }
 
@@ -144,7 +148,6 @@ def get_status(_: str = Depends(get_current_username)):
         }
     except ShareConnectionError as e: # Catch potential error during is_connected check
          logger.error(f"Share connection error during status check: {e}")
-         # Return disconnected status with 503 Service Unavailable
          raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=f"Share connection error: {e}")
     except Exception as e: # Catch unexpected errors
          logger.error(f"Unexpected error during status check: {e}", exc_info=True)
@@ -155,7 +158,6 @@ def get_file_counts(_: str = Depends(get_current_username)):
     """Get file counts for each Pi directory."""
     try:
         if not file_monitor.is_connected():
-             # Use 503 Service Unavailable if share isn't connected
              raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Network share not accessible")
     except ShareConnectionError as e:
          logger.error(f"Share connection error checking connection for file counts: {e}")
@@ -164,25 +166,27 @@ def get_file_counts(_: str = Depends(get_current_username)):
          logger.error(f"Unexpected error checking connection for file counts: {e}", exc_info=True)
          raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Internal server error checking connection")
 
-    # Second try block for the main logic
     try:
+        # Fetch current monitoring states from DataService (which reads from Redis)
+        current_monitoring_states = data_service._get_all_monitoring_states_sync()
         jpg_counts = []
         total_files = 0
-        # Count JPG files in each Pi directory
         for i in range(1, 11):
             pi_name = f"H{i}"
-            # Assuming count_files might raise ShareConnectionError or other FileMonitorError
+            # Skip if not monitored based on Redis state
+            if not current_monitoring_states.get(pi_name, True):
+                continue
             count = file_monitor.count_files(pi_name, '.JPG')
             jpg_counts.append({"directory": pi_name, "count": count})
             total_files += count
         return {"counts": jpg_counts, "total": total_files}
-    except ShareConnectionError as e: # Catch errors during count_files
+    except ShareConnectionError as e:
          logger.error(f"Share connection error during file count: {e}")
          raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=f"Share connection error during file count: {e}")
-    except FileMonitorError as fm_error: # Catch other potential errors from count_files
+    except FileMonitorError as fm_error:
          logger.error(f"FileMonitor error during file count: {fm_error}")
          raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(fm_error))
-    except Exception as e: # Catch unexpected errors during counting
+    except Exception as e:
          logger.error(f"Unexpected error during file count: {e}", exc_info=True)
          raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Internal server error during file count")
 
@@ -198,13 +202,12 @@ def get_pi_status(_: str = Depends(get_current_username)):
          raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=f"Share connection error: {e}")
 
     try:
-        # Pass the monitoring states from the data_service instance
-        statuses, _ = file_monitor.check_pi_status_and_get_data(data_service.monitoring_states)
+        # Fetch current monitoring states from DataService (which reads from Redis)
+        current_monitoring_states = data_service._get_all_monitoring_states_sync()
+        # Pass the fetched monitoring states
+        statuses, _ = file_monitor.check_pi_status_and_get_data(current_monitoring_states)
         logger.info(f"Pi status API called - returning statuses: {statuses}")
         return {"statuses": statuses}
-    # Note: check_pi_status_and_get_data logs errors but doesn't raise them by default
-    # If we modified it to raise ApiConnectionError etc., we could catch them here.
-    # For now, rely on its internal logging for API errors during status check.
     except Exception as e:
          logger.error(f"Unexpected error during pi status check: {e}", exc_info=True)
          raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Internal server error during pi status check")
@@ -222,59 +225,38 @@ def get_pi_statistics(_: str = Depends(get_current_username)):
          logger.error(f"Unexpected error checking connection for pi statistics: {e}", exc_info=True)
          raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Internal server error checking connection")
 
-    # Main logic block
     sent_data = []
     tagged_data = []
     bibs_data = []
     try:
+        # Fetch current monitoring states from DataService (which reads from Redis)
+        current_monitoring_states = data_service._get_all_monitoring_states_sync()
         for i in range(1, 11):
             pi_name = f"H{i}"
-
-            # Check if monitoring is enabled for this device
-            if not data_service.monitoring_states.get(pi_name, True):
+            # Skip if not monitored based on Redis state
+            if not current_monitoring_states.get(pi_name, True):
                 sent_data.append({"device": pi_name, "count": 0})
                 tagged_data.append({"device": pi_name, "count": 0})
                 bibs_data.append({"device": pi_name, "count": 0})
-                continue # Skip to next Pi if not monitored
+                continue
 
-            # Get total images - wrap individual calls in try/except if needed,
-            # or rely on the outer try/except and the exception handlers below.
-            # Assuming get_pi_total_images etc. raise specific errors now.
             total_images = file_monitor.get_pi_total_images(pi_name)
             sent_data.append({"device": pi_name, "count": total_images})
-
-            # Get tagged files
             tagged_count = file_monitor.get_pi_statistics(pi_name)
             tagged_data.append({"device": pi_name, "count": tagged_count})
-
-            # Get bib statistics
             bibs_count = file_monitor.get_pi_bib_statistics(pi_name)
             bibs_data.append({"device": pi_name, "count": bibs_count})
 
-        # Calculate totals after the loop completes successfully
-        totals = [
-            sum(item["count"] for item in sent_data),
-            sum(item["count"] for item in tagged_data),
-            sum(item["count"] for item in bibs_data)
-        ]
-
-        return {
-            "sent": sent_data,
-            "tagged": tagged_data,
-            "bibs": bibs_data,
-            "totals": totals
-        }
-    # Catch specific errors from the underlying file_monitor calls
+        totals = [ sum(item["count"] for item in sent_data), sum(item["count"] for item in tagged_data), sum(item["count"] for item in bibs_data) ]
+        return { "sent": sent_data, "tagged": tagged_data, "bibs": bibs_data, "totals": totals }
     except (ApiConnectionError, ApiTimeoutError, ApiResponseError) as api_error:
          logger.error(f"API error getting pi statistics: {api_error}")
-         # Let the specific exception handlers below handle the HTTP response
          raise api_error
-    except FileMonitorError as fm_error: # Catch other file monitor errors
+    except FileMonitorError as fm_error:
          logger.error(f"FileMonitor error getting pi statistics: {fm_error}")
-         raise fm_error # Let the specific handler handle it
-    except Exception as e: # Catch any other unexpected error during the process
+         raise fm_error
+    except Exception as e:
          logger.error(f"Unexpected error getting pi statistics: {e}", exc_info=True)
-         # Let the global handler deal with this
          raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Internal server error getting pi statistics")
 
 
@@ -289,11 +271,11 @@ def get_pi_monitor(_: str = Depends(get_current_username)):
          raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=f"Share connection error: {e}")
 
     try:
-        # Use the refactored method
-        monitor_data = file_monitor.get_pi_monitor_data(data_service.monitoring_states)
+        # Fetch current monitoring states from DataService (which reads from Redis)
+        current_monitoring_states = data_service._get_all_monitoring_states_sync()
+        # Pass the fetched monitoring states
+        monitor_data = file_monitor.get_pi_monitor_data(current_monitoring_states)
         return {"data": monitor_data}
-    # Note: get_pi_monitor_data calls check_pi_status_and_get_data which logs API errors but doesn't raise them.
-    # If check_pi_status_and_get_data was modified to raise, we could catch here.
     except Exception as e:
          logger.error(f"Unexpected error getting pi monitor data: {e}", exc_info=True)
          raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Internal server error getting pi monitor data")
@@ -311,23 +293,20 @@ def get_success_rates(_: str = Depends(get_current_username)):
          logger.error(f"Unexpected error checking connection for success rates: {e}", exc_info=True)
          raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Internal server error checking connection")
 
-    # Main logic block
     try:
-        monitored_devices = [device for device, state in data_service.monitoring_states.items() if state]
+        # Fetch current monitoring states from DataService (which reads from Redis)
+        current_monitoring_states = data_service._get_all_monitoring_states_sync()
+        monitored_devices = [device for device, state in current_monitoring_states.items() if state]
 
-        # If no devices are being monitored, return zeros
         if not monitored_devices:
             return {"cv_rate": 0, "bib_rate": 0}
 
-        # Assuming get_pi_success_rates might raise errors if underlying API calls fail
         cv_rate, bib_rate = file_monitor.get_pi_success_rates(monitored_devices)
         return {"cv_rate": cv_rate, "bib_rate": bib_rate}
-    # Note: get_pi_success_rates logs errors but doesn't raise specific custom exceptions by default.
-    # If it were modified to raise ApiConnectionError etc., we could catch them here.
-    except FileMonitorError as fm_error: # Catch potential errors if get_pi_success_rates is modified
+    except FileMonitorError as fm_error:
          logger.error(f"FileMonitor error getting success rates: {fm_error}")
-         raise fm_error # Let the specific handler deal with it
-    except Exception as e: # Catch any other unexpected error
+         raise fm_error
+    except Exception as e:
          logger.error(f"Unexpected error getting success rates: {e}", exc_info=True)
          raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Internal server error getting success rates")
 
@@ -335,8 +314,16 @@ def get_success_rates(_: str = Depends(get_current_username)):
 @api_router.post("/monitoring/{device}")
 async def set_monitoring(device: str, state: bool, _: str = Depends(get_current_username)):
     """Set the monitoring state for a device."""
-    data_service.set_monitoring_state(device, state)
-    return {"device": device, "monitoring": state}
+    try:
+        await data_service.set_monitoring_state(device, state) # Now async
+        return {"device": device, "monitoring": state}
+    except ConnectionError as e: # Catch Redis connection error
+         logger.error(f"Redis connection error setting monitoring state: {e}")
+         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Cannot update monitoring state: Redis unavailable")
+    except Exception as e: # Catch other potential errors from Redis or logic
+         logger.error(f"Error setting monitoring state for {device}: {e}", exc_info=True)
+         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to update monitoring state")
+
 
 # Custom Exception Handlers for API routes
 @app.exception_handler(ApiConnectionError)
@@ -398,14 +385,14 @@ if os.path.exists(frontend_dir):
         if os.path.exists(static_dir):
             app.mount("/static", StaticFiles(directory=static_dir), name="static")
             logger.info("Static files mounted at /static")
-        
+
         # Mount other static files
         app.mount("/favicon.ico", StaticFiles(directory=frontend_dir), name="favicon")
         app.mount("/manifest.json", StaticFiles(directory=frontend_dir), name="manifest")
         app.mount("/logo192.png", StaticFiles(directory=frontend_dir), name="logo192")
         app.mount("/logo512.png", StaticFiles(directory=frontend_dir), name="logo512")
         app.mount("/robots.txt", StaticFiles(directory=frontend_dir), name="robots")
-        
+
         # Mount root last
         app.mount("/", SPAStaticFiles(directory=frontend_dir, html=True), name="root")
         logger.info("All static files mounted successfully")
@@ -415,16 +402,20 @@ else:
     logger.error(f"Frontend directory not found at: {frontend_dir}")
 
 # Startup and shutdown events
-# Startup and shutdown events
 @app.on_event("startup")
 async def startup_event():
     logger.info("Starting Web Log Monitor API")
-    logger.info(f"File monitor connection status: {file_monitor.is_connected()}")
-    logger.info(f"Base path: {file_monitor.base_path}")
+    try:
+        is_connected = await asyncio.get_event_loop().run_in_executor(None, file_monitor.is_connected)
+        logger.info(f"File monitor connection status: {is_connected}")
+        logger.info(f"Base path: {file_monitor.base_path}")
+    except Exception as e:
+        logger.error(f"Error checking file monitor connection on startup: {e}", exc_info=True)
+
     # Start the WebSocket background task to broadcast updates
     # Use the get_all_data method from the data_service instance
     # Set an appropriate interval (e.g., 1 second)
-    update_interval = 1.0 
+    update_interval = 1.0
     await websocket_service.start_background_task(data_service.get_all_data, interval=update_interval)
 
 @app.on_event("shutdown")
@@ -432,7 +423,16 @@ async def shutdown_event():
     logger.info("Shutting down Web Log Monitor API")
     # Stop any running background tasks
     await websocket_service.stop_background_task()
+    # Close Redis connection pool if it exists
+    if data_service.redis_pool:
+        logger.info("Closing Redis connection pool.")
+        # The pool doesn't have an explicit close, rely on garbage collection
+        # or ensure connections are closed if using individual connections.
+        # For simplicity here, we assume pool management handles connection closing.
+        pass
+
 
 # Run the server
 if __name__ == "__main__":
+    # Note: log_level here might be overridden by basicConfig if run directly
     uvicorn.run("main:app", host="0.0.0.0", port=API_PORT, reload=True, log_level="info")
